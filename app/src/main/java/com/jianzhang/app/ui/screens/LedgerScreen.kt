@@ -1,5 +1,6 @@
 package com.jianzhang.app.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,28 +10,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,6 +39,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jianzhang.app.data.local.entity.AccountType
@@ -48,22 +48,18 @@ import com.jianzhang.app.data.local.entity.TransactionType
 import com.jianzhang.app.ui.FinanceUiState
 import com.jianzhang.app.ui.components.AppCard
 import com.jianzhang.app.ui.components.EmptyState
-import com.jianzhang.app.ui.components.SectionTitle
-import com.jianzhang.app.ui.components.SummaryCard
 import com.jianzhang.app.ui.components.TransactionRow
 import com.jianzhang.app.util.formatDate
 import com.jianzhang.app.util.formatMoney
 import com.jianzhang.app.util.formatMonth
-import java.time.LocalDate
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LedgerScreen(
     state: FinanceUiState,
     onMonthPrevious: () -> Unit,
     onMonthNext: () -> Unit,
     onOpenSettings: () -> Unit,
-    onAdd: () -> Unit,
     onEdit: (TransactionEntity) -> Unit,
     onDelete: (String) -> Unit,
     onCreateAccount: (String, AccountType, String) -> Unit,
@@ -71,10 +67,6 @@ fun LedgerScreen(
 ) {
     var searchText by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf("全部") }
-    var categoryFilterId by rememberSaveable { mutableStateOf<String?>(null) }
-    var accountFilterId by rememberSaveable { mutableStateOf<String?>(null) }
-    var categoryMenuExpanded by remember { mutableStateOf(false) }
-    var accountMenuExpanded by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<TransactionEntity?>(null) }
     val monthTransactions = state.transactions.filter { it.date.startsWith(state.selectedMonth) }
     val income = monthTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amountInCents }
@@ -90,9 +82,7 @@ fun LedgerScreen(
             "支出" -> transaction.type == TransactionType.EXPENSE
             else -> true
         }
-        val matchesCategory = categoryFilterId == null || transaction.categoryId == categoryFilterId
-        val matchesAccount = accountFilterId == null || transaction.accountId == accountFilterId || transaction.toAccountId == accountFilterId
-        matchesSearch && matchesFilter && matchesCategory && matchesAccount
+        matchesSearch && matchesFilter
     }
     val grouped = filteredTransactions.groupBy { it.date }
     val categoryMap = remember(state.categories) { state.categories.associateBy { it.id } }
@@ -114,17 +104,48 @@ fun LedgerScreen(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().statusBarsPadding(),
+        // Scaffold already applies the top system-bar inset to the NavHost.
+        // Applying statusBarsPadding() here as well leaves a large empty band on phones with a cutout.
+        modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("简账", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("把每一笔钱都变成看得懂的选择", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("账本", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 }
                 IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, contentDescription = "设置") }
+            }
+        }
+        item {
+            androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth()) {
+                TextField(
+                    value = searchText,
+                    onValueChange = { searchText = it },
+                    modifier = Modifier
+                        .fillMaxWidth(0.88f)
+                        .align(Alignment.Center),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (searchText.isNotEmpty()) IconButton(onClick = { searchText = "" }) {
+                            Icon(Icons.Default.Clear, contentDescription = "清除搜索")
+                        }
+                    },
+                    placeholder = { Text("搜索账单、分类或账户") },
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        errorContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                        errorIndicatorColor = Color.Transparent
+                    )
+                )
             }
         }
         item {
@@ -138,11 +159,13 @@ fun LedgerScreen(
                 TextButton(onClick = onMonthNext) { Text("›") }
             }
         }
-        item { SummaryCard(income = income, expense = expense, balance = income - expense) }
-        if (state.monthlyBudget != null && state.monthlyBudget.amountInCents > 0) {
-            item {
-                BudgetSummaryCard(expense = expense, budget = state.monthlyBudget.amountInCents)
-            }
+        item {
+            MonthlyOverviewPager(
+                income = income,
+                expense = expense,
+                balance = income - expense,
+                budget = state.monthlyBudget?.amountInCents?.takeIf { it > 0 }
+            )
         }
         if (state.accounts.isEmpty()) {
             item {
@@ -159,59 +182,9 @@ fun LedgerScreen(
             }
         }
         item {
-            OutlinedTextField(
-                value = searchText,
-                onValueChange = { searchText = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (searchText.isNotEmpty()) IconButton(onClick = { searchText = "" }) {
-                        Icon(Icons.Default.Clear, contentDescription = "清除搜索")
-                    }
-                },
-                placeholder = { Text("搜索账单、分类或账户") }
-            )
-        }
-        item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("全部", "收入", "支出").forEach { option ->
                     FilterChip(selected = filter == option, onClick = { filter = option }, label = { Text(option) })
-                }
-            }
-        }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.foundation.layout.Box {
-                    FilterChip(
-                        selected = categoryFilterId != null,
-                        onClick = { categoryMenuExpanded = true },
-                        label = { Text(state.categories.firstOrNull { it.id == categoryFilterId }?.let { "分类：${it.name}" } ?: "分类") },
-                        trailingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null) }
-                    )
-                    DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
-                        DropdownMenuItem(text = { Text("全部分类") }, onClick = { categoryFilterId = null; categoryMenuExpanded = false })
-                        state.categories.forEach { category ->
-                            DropdownMenuItem(text = { Text("${category.icon} ${category.name}") }, onClick = { categoryFilterId = category.id; categoryMenuExpanded = false })
-                        }
-                    }
-                }
-                androidx.compose.foundation.layout.Box {
-                    FilterChip(
-                        selected = accountFilterId != null,
-                        onClick = { accountMenuExpanded = true },
-                        label = { Text(state.accounts.firstOrNull { it.id == accountFilterId }?.let { "账户：${it.name}" } ?: "账户") },
-                        trailingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null) }
-                    )
-                    DropdownMenu(expanded = accountMenuExpanded, onDismissRequest = { accountMenuExpanded = false }) {
-                        DropdownMenuItem(text = { Text("全部账户") }, onClick = { accountFilterId = null; accountMenuExpanded = false })
-                        state.accounts.forEach { account ->
-                            DropdownMenuItem(text = { Text("${account.icon} ${account.name}") }, onClick = { accountFilterId = account.id; accountMenuExpanded = false })
-                        }
-                    }
-                }
-                if (categoryFilterId != null || accountFilterId != null) {
-                    TextButton(onClick = { categoryFilterId = null; accountFilterId = null }) { Text("清除") }
                 }
             }
         }
@@ -254,29 +227,116 @@ fun LedgerScreen(
 }
 
 @Composable
-private fun BudgetSummaryCard(expense: Long, budget: Long) {
+private fun MonthlyOverviewPager(
+    income: Long,
+    expense: Long,
+    balance: Long,
+    budget: Long?
+) {
+    val pageCount = if (budget != null) 2 else 1
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { pageCount })
+
+    AppCard {
+        Column {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(164.dp),
+                userScrollEnabled = pageCount > 1
+            ) { page ->
+                if (page == 0) {
+                    BalanceSummaryPage(income = income, expense = expense, balance = balance)
+                } else {
+                    BudgetSummaryPage(expense = expense, budget = budget ?: 0L)
+                }
+            }
+            if (pageCount > 1) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(pageCount) { page ->
+                        Text(
+                            text = if (page == pagerState.currentPage) "●" else "○",
+                            color = if (page == pagerState.currentPage) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 3.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BalanceSummaryPage(income: Long, expense: Long, balance: Long) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text("本月结余", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            formatMoney(balance),
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (balance >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            OverviewMetric("收入", formatMoney(income), MaterialTheme.colorScheme.primary, Icons.AutoMirrored.Filled.TrendingUp)
+            OverviewMetric("支出", formatMoney(expense), MaterialTheme.colorScheme.error, Icons.AutoMirrored.Filled.TrendingDown)
+        }
+    }
+}
+
+@Composable
+private fun BudgetSummaryPage(expense: Long, budget: Long) {
     val progress = (expense.toDouble() / budget.toDouble()).coerceIn(0.0, 1.0).toFloat()
     val remaining = budget - expense
-    AppCard {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("本月预算", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    Text("已使用 ${formatMoney(expense)} / ${formatMoney(budget)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(if (remaining >= 0) "剩余 ${formatMoney(remaining)}" else "已超支 ${formatMoney(-remaining)}", color = if (remaining >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column {
+                Text("本月预算", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text("已使用 ${formatMoney(expense)} / ${formatMoney(budget)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
             Text(
-                when {
-                    progress < 0.7f -> "状态正常，继续保持。"
-                    progress < 0.9f -> "需要注意后续支出。"
-                    progress < 1f -> "预算快用完了。"
-                    else -> "本月已经超出预算。"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                if (remaining >= 0) "剩余 ${formatMoney(remaining)}" else "已超支 ${formatMoney(-remaining)}",
+                color = if (remaining >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                fontWeight = FontWeight.SemiBold
             )
+        }
+        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+        Text(
+            when {
+                progress < 0.7f -> "状态正常，继续保持。"
+                progress < 0.9f -> "需要注意后续支出。"
+                progress < 1f -> "预算快用完了。"
+                else -> "本月已经超出预算。"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun OverviewMetric(label: String, value: String, color: Color, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+        Column {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
         }
     }
 }

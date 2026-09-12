@@ -63,7 +63,7 @@ interface FinanceDao {
     @Query("UPDATE accounts SET balanceInCents = :balanceInCents, updatedAt = :updatedAt WHERE id = :accountId")
     suspend fun setAccountBalance(accountId: String, balanceInCents: Long, updatedAt: Long)
 
-    @Query("SELECT COUNT(*) FROM transactions WHERE accountId = :accountId")
+    @Query("SELECT COUNT(*) FROM transactions WHERE accountId = :accountId OR toAccountId = :accountId")
     suspend fun countTransactionsForAccount(accountId: String): Int
 
     @Query("DELETE FROM accounts WHERE id = :accountId")

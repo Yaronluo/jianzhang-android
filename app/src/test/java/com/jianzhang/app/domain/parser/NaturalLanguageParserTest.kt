@@ -35,4 +35,30 @@ class NaturalLanguageParserTest {
     fun rejectsTextWithoutAmount() {
         assertEquals(null, NaturalLanguageParser.parse("今天吃饭", today))
     }
+
+    @Test
+    fun ignoresDateAndTimeNumbersWhenParsingAmount() {
+        val result = NaturalLanguageParser.parse("9月12日 12:30 打车花26元", today)
+
+        assertNotNull(result)
+        assertEquals(2_600L, result?.amountInCents)
+        assertEquals("2026-09-12", result?.date)
+    }
+
+    @Test
+    fun parsesThousandsSeparator() {
+        val result = NaturalLanguageParser.parse("收到工资1,200.50元", today)
+
+        assertNotNull(result)
+        assertEquals(120_050L, result?.amountInCents)
+        assertEquals(TransactionType.INCOME, result?.type)
+    }
+
+    @Test
+    fun parsesMonthDayFromEndOfLongerMonth() {
+        val result = NaturalLanguageParser.parse("2月1日买书20元", LocalDate.of(2026, 1, 31))
+
+        assertNotNull(result)
+        assertEquals("2026-02-01", result?.date)
+    }
 }

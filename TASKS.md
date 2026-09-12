@@ -16,7 +16,7 @@
 - 已完成 Room 数据库 v1→v2 迁移，金额统一使用 Long 保存“分”，避免 Float 精度问题。
 - 已完成测试：`testDebugUnitTest`、`lintDebug`（0 errors）、`assembleDebug`、`assembleDebugAndroidTest`、`assembleRelease`。
 - 已完成无线 ADB 真机验收：设备 `10.0.40.110:40461` 安装并启动成功；手工验证导航、增删改账单、余额联动、转账、余额调整、固定支出确认、统计和分类预算。
-- 已完成真机 Instrumentation 回归：5 项全部通过，覆盖账单编辑/删除、启动器注册、转账、固定支出防重复、演示数据清除余额一致性。
+- 已完成真机 Instrumentation 回归：6 项全部通过，覆盖账单编辑/删除、启动器注册、转账、转入账户历史保护、固定支出防重复、演示数据清除余额一致性。
 
 ## 正在进行
 
@@ -30,7 +30,7 @@
 ## 已知问题
 
 - Windows 中文路径会触发 Android/Kotlin 工具链的路径兼容问题；请使用 `J:` 映射后的 ASCII 路径构建，并将 SDK 映射到 `K:`，详见 README。
-- 当前 `lintDebug` 为 0 errors、43 warnings，主要是 AGP/依赖更新提示、Kapt 建议和 Compose 图标弃用提示，不阻塞构建。
+- 当前 `lintDebug` 为 0 errors、35 warnings，主要是 AGP/依赖更新提示、Kapt 和版本目录建议，不阻塞构建。
 - ADB 列表同时显示 IP serial 和 mDNS serial；测试使用明确 serial `10.0.40.110:40461`，若手机重启或端口变化应以手机无线调试页为准。
 
 ## 下一步

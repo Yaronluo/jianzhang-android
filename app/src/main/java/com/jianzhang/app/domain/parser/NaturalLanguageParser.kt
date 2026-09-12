@@ -4,8 +4,6 @@ import com.jianzhang.app.data.local.entity.TransactionType
 import com.jianzhang.app.data.model.DefaultData
 import com.jianzhang.app.util.parseMoneyToCents
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import java.util.regex.Pattern
 
 data class ParsedTransaction(
@@ -17,12 +15,17 @@ data class ParsedTransaction(
 )
 
 object NaturalLanguageParser {
-    private val amountPattern = Pattern.compile("(?:¥\\s*)?([0-9]+(?:[.,][0-9]{1,2})?)\\s*(?:元|块钱|块|人民币)?")
+    private val amountPattern = Pattern.compile("(?:¥\\s*)?([0-9]{1,3}(?:,[0-9]{3})+(?:\\.[0-9]{1,2})?|[0-9]+(?:\\.[0-9]{1,2})?)\\s*(?:元|块钱|块|人民币)?")
     private val monthDayPattern = Pattern.compile("(\\d{1,2})月(\\d{1,2})日?")
+    private val datePattern = Pattern.compile("(?:\\d{4}年)?\\d{1,2}月\\d{1,2}日?|\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}")
+    private val timePattern = Pattern.compile("\\d{1,2}:\\d{2}")
 
     fun parse(text: String, today: LocalDate = LocalDate.now()): ParsedTransaction? {
         if (text.isBlank()) return null
-        val matcher = amountPattern.matcher(text)
+        // Remove dates and times before looking for an amount, otherwise input such as
+        // "9月12日打车花26元" would incorrectly treat the month as the amount.
+        val amountText = timePattern.matcher(datePattern.matcher(text).replaceAll(" ")).replaceAll(" ")
+        val matcher = amountPattern.matcher(amountText)
         if (!matcher.find()) return null
         val amount = parseMoneyToCents(matcher.group(1).orEmpty()) ?: return null
         val type = if (incomeWords.any { text.contains(it) }) TransactionType.INCOME else TransactionType.EXPENSE
@@ -59,7 +62,7 @@ object NaturalLanguageParser {
             val month = monthDay.group(1).orEmpty().toIntOrNull()
             val day = monthDay.group(2).orEmpty().toIntOrNull()
             if (month != null && day != null) {
-                return runCatching { today.withMonth(month).withDayOfMonth(day).toString() }.getOrDefault(today.toString())
+                return runCatching { LocalDate.of(today.year, month, day).toString() }.getOrDefault(today.toString())
             }
         }
         return when {

@@ -134,6 +134,25 @@ class FinanceDeviceTest {
     }
 
     @Test
+    fun accountUsedAsTransferDestinationIsNotDeleted() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            AppDatabase::class.java
+        ).allowMainThreadQueries().build()
+        val repository = FinanceRepository(database)
+        val fromId = repository.createAccount("转出账户", AccountType.BANK_CARD, 10_000L, "🏦")
+        val toId = repository.createAccount("仅转入账户", AccountType.ALIPAY, 0L, "🟦")
+
+        repository.saveTransfer(null, 1_000L, fromId, toId, LocalDate.now().toString(), "09:00", "测试转入")
+        repository.removeAccount(toId)
+
+        val destination = database.financeDao().getAccount(toId)
+        assertNotNull(destination)
+        assertFalse(destination?.enabled ?: true)
+        database.close()
+    }
+
+    @Test
     fun clearingDemoDataPreservesRealTransactionBalanceEffect() = runBlocking {
         val database = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(),

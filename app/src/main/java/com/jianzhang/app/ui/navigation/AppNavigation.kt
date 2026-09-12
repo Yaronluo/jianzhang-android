@@ -2,11 +2,11 @@ package com.jianzhang.app.ui.navigation
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -42,7 +42,7 @@ private data class BottomDestination(
 )
 
 private val bottomDestinations = listOf(
-    BottomDestination("ledger", "账本", Icons.Default.MenuBook),
+    BottomDestination("ledger", "账本", Icons.AutoMirrored.Filled.MenuBook),
     BottomDestination("recurring", "固支", Icons.Default.CalendarMonth),
     BottomDestination("add", "记账", Icons.Default.Add),
     BottomDestination("assets", "资产", Icons.Default.AccountBalance),
@@ -102,14 +102,13 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                     onMonthPrevious = viewModel::previousMonth,
                     onMonthNext = viewModel::nextMonth,
                     onOpenSettings = { navController.navigate("settings") },
-                    onAdd = { navController.navigate("add") },
-                        onEdit = { transaction ->
-                            if (transaction.type == com.jianzhang.app.data.local.entity.TransactionType.TRANSFER) {
-                                navController.navigate("transfer/${transaction.id}")
-                            } else {
-                                navController.navigate("add/${transaction.id}")
-                            }
-                        },
+                    onEdit = { transaction ->
+                        if (transaction.type == com.jianzhang.app.data.local.entity.TransactionType.TRANSFER) {
+                            navController.navigate("transfer/${transaction.id}")
+                        } else {
+                            navController.navigate("add/${transaction.id}")
+                        }
+                    },
                     onDelete = viewModel::deleteTransaction,
                     onCreateAccount = viewModel::createRecommendedAccount,
                     onGenerateDemo = viewModel::generateDemoData
