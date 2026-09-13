@@ -1,18 +1,31 @@
 package com.jianzhang.app.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
@@ -22,16 +35,15 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,9 +51,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.jianzhang.app.data.local.entity.AccountType
 import com.jianzhang.app.data.local.entity.TransactionEntity
 import com.jianzhang.app.data.local.entity.TransactionType
@@ -52,6 +72,7 @@ import com.jianzhang.app.ui.components.TransactionRow
 import com.jianzhang.app.util.formatDate
 import com.jianzhang.app.util.formatMoney
 import com.jianzhang.app.util.formatMonth
+import java.time.YearMonth
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +80,7 @@ fun LedgerScreen(
     state: FinanceUiState,
     onMonthPrevious: () -> Unit,
     onMonthNext: () -> Unit,
+    onMonthCurrent: () -> Unit,
     onOpenSettings: () -> Unit,
     onEdit: (TransactionEntity) -> Unit,
     onDelete: (String) -> Unit,
@@ -87,6 +109,40 @@ fun LedgerScreen(
     val grouped = filteredTransactions.groupBy { it.date }
     val categoryMap = remember(state.categories) { state.categories.associateBy { it.id } }
     val accountMap = remember(state.accounts) { state.accounts.associateBy { it.id } }
+    val isCurrentMonth = state.selectedMonth == YearMonth.now().toString()
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    val statusBarInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val compactSearchHeight = 44.dp
+    val compactSearchHeightPx = with(density) { compactSearchHeight.toPx() }
+    val headerCollapseDistancePx = with(density) { 68.dp.toPx() }
+    val monthPickerExtentPx = with(density) { 50.dp.toPx() }
+    val searchScrollPx by remember {
+        derivedStateOf {
+            if (listState.firstVisibleItemIndex == 0) listState.firstVisibleItemScrollOffset.toFloat()
+            else compactSearchHeightPx
+        }
+    }
+    val searchTargetHeightPx = (compactSearchHeightPx - searchScrollPx).coerceAtLeast(0f)
+    val animatedSearchHeightPx by animateFloatAsState(
+        targetValue = searchTargetHeightPx,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "搜索栏收起展开"
+    )
+    val searchVisibleHeight = with(density) {
+        animatedSearchHeightPx.toDp()
+    }
+    val headerCollapseProgress by remember {
+        derivedStateOf {
+            val scrollPastSearch = when (listState.firstVisibleItemIndex) {
+                0 -> 0f
+                1 -> listState.firstVisibleItemScrollOffset.toFloat()
+                2 -> monthPickerExtentPx + listState.firstVisibleItemScrollOffset.toFloat()
+                else -> headerCollapseDistancePx
+            }
+            (scrollPastSearch / headerCollapseDistancePx).coerceIn(0f, 1f)
+        }
+    }
 
     if (pendingDelete != null) {
         AlertDialog(
@@ -103,63 +159,101 @@ fun LedgerScreen(
         )
     }
 
-    LazyColumn(
-        // Scaffold already applies the top system-bar inset to the NavHost.
-        // Applying statusBarsPadding() here as well leaves a large empty band on phones with a cutout.
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("账本", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                }
-                IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, contentDescription = "设置") }
-            }
-        }
-        item {
-            androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth()) {
-                TextField(
-                    value = searchText,
-                    onValueChange = { searchText = it },
+        LazyColumn(
+            // The title bar is an overlay. Only the content below it scrolls away.
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, top = statusBarInset + 96.dp, end = 20.dp, bottom = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+        item(key = "search") {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(searchVisibleHeight)
+                    .clipToBounds()
+                    .graphicsLayer { translationY = searchScrollPx }
+            ) {
+                Row(
                     modifier = Modifier
-                        .fillMaxWidth(0.88f)
-                        .align(Alignment.Center),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
-                    singleLine = true,
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (searchText.isNotEmpty()) IconButton(onClick = { searchText = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "清除搜索")
-                        }
-                    },
-                    placeholder = { Text("搜索账单、分类或账户") },
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        errorContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent,
-                        errorIndicatorColor = Color.Transparent
+                        .fillMaxWidth()
+                        .height(compactSearchHeight)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(50))
+                        .padding(start = 14.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(21.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 10.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        if (searchText.isEmpty()) {
+                            Text(
+                                "搜索账单、分类或账户",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        BasicTextField(
+                            value = searchText,
+                            onValueChange = { searchText = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .semantics { contentDescription = "搜索账单、分类或账户" },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
+                        )
+                    }
+                    if (searchText.isNotEmpty()) {
+                        IconButton(onClick = { searchText = "" }, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Default.Clear, contentDescription = "清除搜索", modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
             }
         }
-        item {
+        item(key = "month-picker") {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(44.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                TextButton(onClick = onMonthPrevious) { Text("‹") }
-                Text(formatMonth(state.selectedMonth), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                TextButton(onClick = onMonthNext) { Text("›") }
+                MonthNavigationButton(symbol = "‹", description = "上个月", onClick = onMonthPrevious)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(formatMonth(state.selectedMonth), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    if (!isCurrentMonth) {
+                        Surface(
+                            onClick = onMonthCurrent,
+                            shape = RoundedCornerShape(18.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            shadowElevation = 3.dp
+                        ) {
+                            Text(
+                                "回到本月",
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+                MonthNavigationButton(symbol = "›", description = "下个月", onClick = onMonthNext)
             }
         }
-        item {
+        item(key = "monthly-overview") {
             MonthlyOverviewPager(
                 income = income,
                 expense = expense,
@@ -181,10 +275,23 @@ fun LedgerScreen(
                 }
             }
         }
-        item {
+        item(key = "filters") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("全部", "收入", "支出").forEach { option ->
-                    FilterChip(selected = filter == option, onClick = { filter = option }, label = { Text(option) })
+                    val selected = filter == option
+                    Surface(
+                        onClick = { filter = option },
+                        shape = RoundedCornerShape(50),
+                        color = if (selected) Color(0xFF242528) else Color.Transparent,
+                        contentColor = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                    ) {
+                        Text(
+                            option,
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 7.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                        )
+                    }
                 }
             }
         }
@@ -201,21 +308,34 @@ fun LedgerScreen(
                 item(key = "date-$date") {
                     Column {
                         Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 3.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(formatDate(date), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                            Text(formatMoney(transactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amountInCents }), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                "${formatDate(date)} · ${weekdayText(date)}",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(
+                                    "收 ${formatMoney(transactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amountInCents })}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    "支 ${formatMoney(transactions.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amountInCents })}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
-                        AppCard {
-                            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)) {
-                                transactions.forEach { transaction ->
-                                    TransactionRow(
-                                        transaction = transaction,
-                                        category = categoryMap[transaction.categoryId],
-                                        account = accountMap[transaction.accountId],
-                                        toAccount = accountMap[transaction.toAccountId],
-                                        onEdit = { onEdit(transaction) },
-                                        onDelete = { pendingDelete = transaction }
-                                    )
-                                }
+                        Column {
+                            transactions.forEach { transaction ->
+                                TransactionRow(
+                                    transaction = transaction,
+                                    category = categoryMap[transaction.categoryId],
+                                    account = accountMap[transaction.accountId],
+                                    toAccount = accountMap[transaction.toAccountId],
+                                    onEdit = { onEdit(transaction) },
+                                    onDelete = { pendingDelete = transaction }
+                                )
                             }
                         }
                     }
@@ -223,6 +343,113 @@ fun LedgerScreen(
             }
         }
         item { Spacer(modifier = Modifier.height(12.dp)) }
+        }
+        LedgerCollapsingHeader(
+            collapseProgress = headerCollapseProgress,
+            onOpenSettings = onOpenSettings
+        )
+    }
+}
+
+@Composable
+private fun LedgerCollapsingHeader(
+    collapseProgress: Float,
+    onOpenSettings: () -> Unit
+) {
+    val progress = collapseProgress
+    val statusBarInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val largeTitleProgress = smoothStep((progress / 0.52f).coerceIn(0f, 1f))
+    val compactTitleProgress = smoothStep(((progress - 0.60f) / 0.40f).coerceIn(0f, 1f))
+    val frostProgress = smoothStep(progress)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(statusBarInset + 104.dp)
+            .zIndex(3f)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    alpha = 1f - largeTitleProgress
+                    translationY = -48.dp.toPx() * largeTitleProgress
+                }
+        ) {
+            Text(
+                "账本",
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 20.dp, bottom = 10.dp),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(statusBarInset + 128.dp)
+                .align(Alignment.TopCenter)
+                .zIndex(1f)
+                .graphicsLayer { alpha = frostProgress }
+                .background(
+                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0f to MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                            0.28f to MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                            0.58f to MaterialTheme.colorScheme.surface.copy(alpha = 0.68f),
+                            0.82f to MaterialTheme.colorScheme.surface.copy(alpha = 0.30f),
+                            1f to MaterialTheme.colorScheme.surface.copy(alpha = 0f)
+                        )
+                    )
+                )
+        )
+        Text(
+            "账本",
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = statusBarInset + 18.dp)
+                .zIndex(2f)
+                .graphicsLayer {
+                    alpha = compactTitleProgress
+                    translationY = 10.dp.toPx() * (1f - compactTitleProgress)
+                },
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Surface(
+            onClick = onOpenSettings,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = statusBarInset + 8.dp, end = 12.dp)
+                .size(44.dp)
+                .zIndex(2f),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+            shadowElevation = 6.dp
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Settings, contentDescription = "设置", modifier = Modifier.size(24.dp))
+            }
+        }
+    }
+}
+
+private fun smoothStep(value: Float): Float = value * value * (3f - 2f * value)
+
+@Composable
+private fun MonthNavigationButton(symbol: String, description: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .size(34.dp)
+            .semantics { contentDescription = description },
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 3.dp
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(symbol, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        }
     }
 }
 
@@ -242,7 +469,7 @@ private fun MonthlyOverviewPager(
                 state = pagerState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(164.dp),
+                    .height(128.dp),
                 userScrollEnabled = pageCount > 1
             ) { page ->
                 if (page == 0) {
@@ -255,14 +482,14 @@ private fun MonthlyOverviewPager(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 10.dp),
+                        .padding(bottom = 6.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     repeat(pageCount) { page ->
                         Text(
                             text = if (page == pagerState.currentPage) "●" else "○",
-                            color = if (page == pagerState.currentPage) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                            color = if (page == pagerState.currentPage) Color(0xFFF4C542) else Color(0xFFF4C542).copy(alpha = 0.52f),
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(horizontal = 3.dp)
                         )
@@ -278,15 +505,15 @@ private fun BalanceSummaryPage(income: Long, expense: Long, balance: Long) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         Text("本月结余", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             formatMoney(balance),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = if (balance >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+            color = MaterialTheme.colorScheme.onSurface
         )
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             OverviewMetric("收入", formatMoney(income), MaterialTheme.colorScheme.primary, Icons.AutoMirrored.Filled.TrendingUp)
@@ -302,8 +529,8 @@ private fun BudgetSummaryPage(expense: Long, budget: Long) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column {
@@ -312,7 +539,7 @@ private fun BudgetSummaryPage(expense: Long, budget: Long) {
             }
             Text(
                 if (remaining >= 0) "剩余 ${formatMoney(remaining)}" else "已超支 ${formatMoney(-remaining)}",
-                color = if (remaining >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                color = if (remaining >= 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
                 fontWeight = FontWeight.SemiBold
             )
         }
@@ -329,6 +556,18 @@ private fun BudgetSummaryPage(expense: Long, budget: Long) {
         )
     }
 }
+
+private fun weekdayText(date: String): String = runCatching {
+    when (java.time.LocalDate.parse(date).dayOfWeek) {
+        java.time.DayOfWeek.MONDAY -> "星期一"
+        java.time.DayOfWeek.TUESDAY -> "星期二"
+        java.time.DayOfWeek.WEDNESDAY -> "星期三"
+        java.time.DayOfWeek.THURSDAY -> "星期四"
+        java.time.DayOfWeek.FRIDAY -> "星期五"
+        java.time.DayOfWeek.SATURDAY -> "星期六"
+        java.time.DayOfWeek.SUNDAY -> "星期日"
+    }
+}.getOrDefault("")
 
 @Composable
 private fun OverviewMetric(label: String, value: String, color: Color, icon: androidx.compose.ui.graphics.vector.ImageVector) {

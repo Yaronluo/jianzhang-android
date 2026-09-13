@@ -14,9 +14,9 @@ private val JianzhangLightColors = lightColorScheme(
     onPrimaryContainer = Color(0xFF082019),
     secondary = Color(0xFF5C6370),
     secondaryContainer = Color(0xFFE0E4EC),
-    background = Color(0xFFF8FAF8),
+    background = Color(0xFFF7F7F8),
     surface = Color.White,
-    surfaceVariant = Color(0xFFE8EEE9),
+    surfaceVariant = Color(0xFFE9EAEC),
     error = Color(0xFFBA1A1A)
 )
 
@@ -26,9 +26,9 @@ private val JianzhangDarkColors = darkColorScheme(
     primaryContainer = Color(0xFF205042),
     onPrimaryContainer = Color(0xFFC2EBDD),
     secondary = Color(0xFFC2C7D0),
-    background = Color(0xFF101412),
-    surface = Color(0xFF171B18),
-    surfaceVariant = Color(0xFF3F4944)
+    background = Color(0xFF121315),
+    surface = Color(0xFF1A1B1E),
+    surfaceVariant = Color(0xFF303238)
 )
 
 @Composable

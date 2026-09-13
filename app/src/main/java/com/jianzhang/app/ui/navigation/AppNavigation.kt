@@ -1,6 +1,10 @@
 package com.jianzhang.app.ui.navigation
 
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AccountBalance
@@ -57,6 +61,7 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
     val entry by navController.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: "ledger"
     val snackbarHostState = remember { SnackbarHostState() }
+    val layoutDirection = LocalLayoutDirection.current
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { message -> snackbarHostState.showSnackbar(message) }
@@ -94,13 +99,19 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
         NavHost(
             navController = navController,
             startDestination = "ledger",
-            modifier = Modifier.padding(padding)
+            modifier = Modifier.padding(
+                start = padding.calculateStartPadding(layoutDirection),
+                top = if (route == "ledger") 0.dp else padding.calculateTopPadding(),
+                end = padding.calculateEndPadding(layoutDirection),
+                bottom = padding.calculateBottomPadding()
+            )
         ) {
             composable("ledger") {
                 LedgerScreen(
                     state = state,
                     onMonthPrevious = viewModel::previousMonth,
                     onMonthNext = viewModel::nextMonth,
+                    onMonthCurrent = { viewModel.setMonth(java.time.YearMonth.now().toString()) },
                     onOpenSettings = { navController.navigate("settings") },
                     onEdit = { transaction ->
                         if (transaction.type == com.jianzhang.app.data.local.entity.TransactionType.TRANSFER) {
