@@ -2,8 +2,10 @@ package com.jianzhang.app.ui.navigation
 
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
@@ -79,7 +81,6 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
     val entry by navController.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: "ledger"
     val snackbarHostState = remember { SnackbarHostState() }
-    val layoutDirection = LocalLayoutDirection.current
     val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     LaunchedEffect(Unit) {
@@ -101,127 +102,136 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                 exitTransition = { ExitTransition.None },
                 popEnterTransition = { EnterTransition.None },
                 popExitTransition = { ExitTransition.None },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(
-                        start = padding.calculateStartPadding(layoutDirection),
-                        top = if (route == "ledger") 0.dp else padding.calculateTopPadding(),
-                        end = padding.calculateEndPadding(layoutDirection),
-                        // Floating controls overlay the page; each scrollable screen keeps
-                        // its own bottom content padding so the page can still draw behind them.
-                        bottom = if (showBottomBar) 0.dp else padding.calculateBottomPadding()
-                    )
+                modifier = Modifier.fillMaxSize()
             ) {
             composable("ledger") {
-                LedgerScreen(
-                    state = state,
-                    onMonthPrevious = viewModel::previousMonth,
-                    onMonthNext = viewModel::nextMonth,
-                    onMonthCurrent = { viewModel.setMonth(java.time.YearMonth.now().toString()) },
-                    onOpenSettings = { navController.navigate("settings") },
-                    onEdit = { transaction ->
-                        if (transaction.type == com.jianzhang.app.data.local.entity.TransactionType.TRANSFER) {
-                            navController.navigate("transfer/${transaction.id}")
-                        } else {
-                            navController.navigate("add/${transaction.id}")
-                        }
-                    },
-                    onDelete = viewModel::deleteTransaction,
-                    onCreateAccount = viewModel::createRecommendedAccount,
-                    onGenerateDemo = viewModel::generateDemoData
-                )
+                ScreenWithInsets(scaffoldPadding = padding, topInset = false, bottomInset = false) {
+                    LedgerScreen(
+                        state = state,
+                        onMonthPrevious = viewModel::previousMonth,
+                        onMonthNext = viewModel::nextMonth,
+                        onMonthCurrent = { viewModel.setMonth(java.time.YearMonth.now().toString()) },
+                        onOpenSettings = { navController.navigate("settings") },
+                        onEdit = { transaction ->
+                            if (transaction.type == com.jianzhang.app.data.local.entity.TransactionType.TRANSFER) {
+                                navController.navigate("transfer/${transaction.id}")
+                            } else {
+                                navController.navigate("add/${transaction.id}")
+                            }
+                        },
+                        onDelete = viewModel::deleteTransaction,
+                        onCreateAccount = viewModel::createRecommendedAccount,
+                        onGenerateDemo = viewModel::generateDemoData
+                    )
+                }
             }
             composable("recurring") {
-                RecurringScreen(
-                    state = state,
-                    onBack = { navController.popBackStack() },
-                    onSave = viewModel::saveRecurringExpense,
-                    onConfirm = viewModel::confirmRecurringExpense,
-                    onDelete = viewModel::deleteRecurringExpense
-                )
+                ScreenWithInsets(scaffoldPadding = padding, bottomInset = false) {
+                    RecurringScreen(
+                        state = state,
+                        onBack = { navController.popBackStack() },
+                        onSave = viewModel::saveRecurringExpense,
+                        onConfirm = viewModel::confirmRecurringExpense,
+                        onDelete = viewModel::deleteRecurringExpense
+                    )
+                }
             }
             composable("add") {
-                AddTransactionScreen(
-                    state = state,
-                    transactionId = null,
-                    onBack = { navController.popBackStack() },
-                    onSave = { id, amount, type, category, account, date, note ->
-                        viewModel.saveTransaction(id, amount, type, category, account, date, note)
-                        navController.popBackStack()
-                    }
-                )
+                ScreenWithInsets(scaffoldPadding = padding) {
+                    AddTransactionScreen(
+                        state = state,
+                        transactionId = null,
+                        onBack = { navController.popBackStack() },
+                        onSave = { id, amount, type, category, account, date, note ->
+                            viewModel.saveTransaction(id, amount, type, category, account, date, note)
+                            navController.popBackStack()
+                        }
+                    )
+                }
             }
             composable(
                 route = "add/{transactionId}",
                 arguments = listOf(navArgument("transactionId") { type = NavType.StringType })
             ) { backStackEntry ->
-                AddTransactionScreen(
-                    state = state,
-                    transactionId = backStackEntry.arguments?.getString("transactionId"),
-                    onBack = { navController.popBackStack() },
-                    onSave = { id, amount, type, category, account, date, note ->
-                        viewModel.saveTransaction(id, amount, type, category, account, date, note)
-                        navController.popBackStack()
-                    }
-                )
+                ScreenWithInsets(scaffoldPadding = padding) {
+                    AddTransactionScreen(
+                        state = state,
+                        transactionId = backStackEntry.arguments?.getString("transactionId"),
+                        onBack = { navController.popBackStack() },
+                        onSave = { id, amount, type, category, account, date, note ->
+                            viewModel.saveTransaction(id, amount, type, category, account, date, note)
+                            navController.popBackStack()
+                        }
+                    )
+                }
             }
             composable("assets") {
-                AssetsScreen(
-                    state = state,
-                    onCreateAccount = viewModel::createAccount,
-                    onUpdateAccount = viewModel::updateAccount,
-                    onRemoveAccount = viewModel::removeAccount,
-                    onAdjustBalance = viewModel::adjustAccountBalance,
-                    onTransfer = { navController.navigate("transfer") }
-                )
+                ScreenWithInsets(scaffoldPadding = padding, bottomInset = false) {
+                    AssetsScreen(
+                        state = state,
+                        onCreateAccount = viewModel::createAccount,
+                        onUpdateAccount = viewModel::updateAccount,
+                        onRemoveAccount = viewModel::removeAccount,
+                        onAdjustBalance = viewModel::adjustAccountBalance,
+                        onTransfer = { navController.navigate("transfer") }
+                    )
+                }
             }
             composable("transfer") {
-                TransferScreen(
-                    state = state,
-                    transactionId = null,
-                    onBack = { navController.popBackStack() },
-                    onSave = { id, amount, from, to, date, note ->
-                        viewModel.saveTransfer(id, amount, from, to, date, note)
-                        navController.popBackStack()
-                    }
-                )
+                ScreenWithInsets(scaffoldPadding = padding) {
+                    TransferScreen(
+                        state = state,
+                        transactionId = null,
+                        onBack = { navController.popBackStack() },
+                        onSave = { id, amount, from, to, date, note ->
+                            viewModel.saveTransfer(id, amount, from, to, date, note)
+                            navController.popBackStack()
+                        }
+                    )
+                }
             }
             composable(
                 route = "transfer/{transactionId}",
                 arguments = listOf(navArgument("transactionId") { type = NavType.StringType })
             ) { backStackEntry ->
-                TransferScreen(
-                    state = state,
-                    transactionId = backStackEntry.arguments?.getString("transactionId"),
-                    onBack = { navController.popBackStack() },
-                    onSave = { id, amount, from, to, date, note ->
-                        viewModel.saveTransfer(id, amount, from, to, date, note)
-                        navController.popBackStack()
-                    }
-                )
+                ScreenWithInsets(scaffoldPadding = padding) {
+                    TransferScreen(
+                        state = state,
+                        transactionId = backStackEntry.arguments?.getString("transactionId"),
+                        onBack = { navController.popBackStack() },
+                        onSave = { id, amount, from, to, date, note ->
+                            viewModel.saveTransfer(id, amount, from, to, date, note)
+                            navController.popBackStack()
+                        }
+                    )
+                }
             }
             composable("statistics") {
-                StatisticsScreen(
-                    state = state,
-                    onMonthPrevious = viewModel::previousMonth,
-                    onMonthNext = viewModel::nextMonth,
-                    onSetBudget = viewModel::setMonthlyBudget,
-                    onSetCategoryBudget = viewModel::setCategoryBudget
-                )
+                ScreenWithInsets(scaffoldPadding = padding, bottomInset = false) {
+                    StatisticsScreen(
+                        state = state,
+                        onMonthPrevious = viewModel::previousMonth,
+                        onMonthNext = viewModel::nextMonth,
+                        onSetBudget = viewModel::setMonthlyBudget,
+                        onSetCategoryBudget = viewModel::setCategoryBudget
+                    )
+                }
             }
             composable("settings") {
-                SettingsScreen(
-                    onBack = { navController.popBackStack() },
-                    onGenerateDemo = viewModel::generateDemoData,
-                    onClearDemo = viewModel::clearDemoData,
-                    onOpenAssets = {
-                        navController.popBackStack()
-                        navController.navigate("assets")
-                    },
-                    themeMode = themeMode,
-                    onSetThemeMode = viewModel::setThemeMode,
-                    exportText = viewModel::exportText
-                )
+                ScreenWithInsets(scaffoldPadding = padding) {
+                    SettingsScreen(
+                        onBack = { navController.popBackStack() },
+                        onGenerateDemo = viewModel::generateDemoData,
+                        onClearDemo = viewModel::clearDemoData,
+                        onOpenAssets = {
+                            navController.popBackStack()
+                            navController.navigate("assets")
+                        },
+                        themeMode = themeMode,
+                        onSetThemeMode = viewModel::setThemeMode,
+                        exportText = viewModel::exportText
+                    )
+                }
             }
 
             }
@@ -293,6 +303,34 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ScreenWithInsets(
+    scaffoldPadding: PaddingValues,
+    topInset: Boolean = true,
+    bottomInset: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    val layoutDirection = LocalLayoutDirection.current
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    start = scaffoldPadding.calculateStartPadding(layoutDirection),
+                    top = if (topInset) scaffoldPadding.calculateTopPadding() else 0.dp,
+                    end = scaffoldPadding.calculateEndPadding(layoutDirection),
+                    bottom = if (bottomInset) scaffoldPadding.calculateBottomPadding() else 0.dp
+                )
+        ) {
+            content()
         }
     }
 }
