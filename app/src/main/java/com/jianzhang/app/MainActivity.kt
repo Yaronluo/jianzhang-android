@@ -1,24 +1,35 @@
 package com.jianzhang.app
 
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jianzhang.app.ui.FinanceViewModel
 import com.jianzhang.app.ui.navigation.JianzhangApp
 import com.jianzhang.app.ui.screens.OnboardingScreen
 import com.jianzhang.app.ui.theme.JianzhangTheme
-import androidx.compose.runtime.getValue
 
 class MainActivity : ComponentActivity() {
     private val viewModel: FinanceViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        )
         setContent {
             val onboardingVisible by viewModel.onboardingVisible.collectAsStateWithLifecycle()
             val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -27,14 +38,37 @@ class MainActivity : ComponentActivity() {
                 FinanceViewModel.THEME_LIGHT -> false
                 else -> isSystemInDarkTheme()
             }
-            JianzhangTheme(darkTheme = darkTheme) {
-                if (onboardingVisible) {
-                    OnboardingScreen(
-                        onSkip = viewModel::finishOnboarding,
-                        onCreateAccount = viewModel::createOnboardingAccount
+            SideEffect {
+                enableEdgeToEdge(
+                    statusBarStyle = SystemBarStyle.auto(
+                        lightScrim = Color.TRANSPARENT,
+                        darkScrim = Color.TRANSPARENT,
+                        detectDarkMode = { darkTheme }
+                    ),
+                    navigationBarStyle = SystemBarStyle.auto(
+                        lightScrim = Color.TRANSPARENT,
+                        darkScrim = Color.TRANSPARENT,
+                        detectDarkMode = { darkTheme }
                     )
-                } else {
-                    JianzhangApp(viewModel)
+                )
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    window.isStatusBarContrastEnforced = false
+                    window.isNavigationBarContrastEnforced = false
+                }
+            }
+            JianzhangTheme(darkTheme = darkTheme) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    if (onboardingVisible) {
+                        OnboardingScreen(
+                            onSkip = viewModel::finishOnboarding,
+                            onCreateAccount = viewModel::createOnboardingAccount
+                        )
+                    } else {
+                        JianzhangApp(viewModel)
+                    }
                 }
             }
         }

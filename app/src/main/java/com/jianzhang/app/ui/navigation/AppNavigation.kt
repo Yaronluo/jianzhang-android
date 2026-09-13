@@ -1,8 +1,25 @@
 package com.jianzhang.app.ui.navigation
 
-import androidx.compose.foundation.layout.padding
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
@@ -12,17 +29,19 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -48,7 +67,6 @@ private data class BottomDestination(
 private val bottomDestinations = listOf(
     BottomDestination("ledger", "账本", Icons.AutoMirrored.Filled.MenuBook),
     BottomDestination("recurring", "固支", Icons.Default.CalendarMonth),
-    BottomDestination("add", "记账", Icons.Default.Add),
     BottomDestination("assets", "资产", Icons.Default.AccountBalance),
     BottomDestination("statistics", "统计", Icons.Default.Assessment)
 )
@@ -62,6 +80,7 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
     val route = entry?.destination?.route ?: "ledger"
     val snackbarHostState = remember { SnackbarHostState() }
     val layoutDirection = LocalLayoutDirection.current
+    val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { message -> snackbarHostState.showSnackbar(message) }
@@ -69,43 +88,30 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
 
     val showBottomBar = route in setOf("ledger", "recurring", "assets", "statistics")
     Scaffold(
+        containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = {
-            if (showBottomBar) {
-                NavigationBar {
-                    bottomDestinations.forEach { destination ->
-                        val selected = route == destination.route
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = {
-                                if (destination.route == "add") {
-                                    navController.navigate("add")
-                                } else {
-                                    navController.navigate(destination.route) {
-                                        popUpTo("ledger") { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
-                            },
-                            icon = { Icon(destination.icon, contentDescription = destination.label) },
-                            label = { Text(destination.label) }
-                        )
-                    }
-                }
-            }
-        }
     ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = "ledger",
-            modifier = Modifier.padding(
-                start = padding.calculateStartPadding(layoutDirection),
-                top = if (route == "ledger") 0.dp else padding.calculateTopPadding(),
-                end = padding.calculateEndPadding(layoutDirection),
-                bottom = padding.calculateBottomPadding()
-            )
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            NavHost(
+                navController = navController,
+                startDestination = "ledger",
+                // Navigation Compose defaults to a fade transition. These routes are
+                // lightweight app surfaces, so switch them immediately.
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        start = padding.calculateStartPadding(layoutDirection),
+                        top = if (route == "ledger") 0.dp else padding.calculateTopPadding(),
+                        end = padding.calculateEndPadding(layoutDirection),
+                        // Floating controls overlay the page; each scrollable screen keeps
+                        // its own bottom content padding so the page can still draw behind them.
+                        bottom = if (showBottomBar) 0.dp else padding.calculateBottomPadding()
+                    )
+            ) {
             composable("ledger") {
                 LedgerScreen(
                     state = state,
@@ -216,6 +222,76 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                     onSetThemeMode = viewModel::setThemeMode,
                     exportText = viewModel::exportText
                 )
+            }
+
+            }
+
+            if (showBottomBar) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+                        .zIndex(2f)
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp),
+                        shape = RoundedCornerShape(32.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        shadowElevation = 8.dp
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(64.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            bottomDestinations.forEach { destination ->
+                                val selected = route == destination.route
+                                NavigationBarItem(
+                                    selected = selected,
+                                    onClick = {
+                                        navController.navigate(destination.route) {
+                                            popUpTo("ledger") { saveState = true }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    },
+                                    icon = { Icon(destination.icon, contentDescription = destination.label) },
+                                    label = { Text(destination.label) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Surface(
+                    onClick = { navController.navigate("add") },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(
+                            end = 28.dp,
+                            bottom = navigationBarInset + 12.dp + 64.dp + 16.dp
+                        )
+                        .size(56.dp)
+                        .zIndex(3f),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    shadowElevation = 8.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "记账",
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
             }
         }
     }

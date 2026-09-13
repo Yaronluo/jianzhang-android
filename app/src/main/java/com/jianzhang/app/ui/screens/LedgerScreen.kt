@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -113,6 +114,8 @@ fun LedgerScreen(
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     val statusBarInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val floatingControlsClearance = navigationBarInset + 12.dp + 64.dp + 16.dp + 56.dp + 12.dp
     val compactSearchHeight = 44.dp
     val compactSearchHeightPx = with(density) { compactSearchHeight.toPx() }
     val headerCollapseDistancePx = with(density) { 68.dp.toPx() }
@@ -168,7 +171,14 @@ fun LedgerScreen(
             // The title bar is an overlay. Only the content below it scrolls away.
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, top = statusBarInset + 96.dp, end = 20.dp, bottom = 18.dp),
+            // The navigation controls and the floating add button sit over the page.
+            // Leave transparent scrollable room so the final transaction clears both.
+            contentPadding = PaddingValues(
+                start = 20.dp,
+                top = statusBarInset + 96.dp,
+                end = 20.dp,
+                bottom = floatingControlsClearance
+            ),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
         item(key = "search") {
