@@ -119,12 +119,17 @@ class FinanceRepository(private val database: AppDatabase) {
     }
 
     suspend fun updateAccount(account: AccountEntity) {
-        val normalizedBalance = if (account.isLiability) {
-            -kotlin.math.abs(account.balanceInCents)
-        } else {
-            kotlin.math.abs(account.balanceInCents)
+        database.withTransaction {
+            val current = dao.getAccount(account.id) ?: return@withTransaction
+            val normalizedBalance = if (current.isLiability == account.isLiability) {
+                current.balanceInCents
+            } else if (account.isLiability) {
+                -kotlin.math.abs(current.balanceInCents)
+            } else {
+                kotlin.math.abs(current.balanceInCents)
+            }
+            dao.updateAccount(account.copy(balanceInCents = normalizedBalance, updatedAt = System.currentTimeMillis()))
         }
-        dao.updateAccount(account.copy(balanceInCents = normalizedBalance, updatedAt = System.currentTimeMillis()))
     }
 
     suspend fun adjustAccountBalance(accountId: String, balanceInCents: Long) {

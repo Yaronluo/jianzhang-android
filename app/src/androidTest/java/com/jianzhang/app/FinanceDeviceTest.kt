@@ -153,6 +153,32 @@ class FinanceDeviceTest {
     }
 
     @Test
+    fun editingAccountDetailsDoesNotFlipAnOverdrawnBalance() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            AppDatabase::class.java
+        ).allowMainThreadQueries().build()
+        val repository = FinanceRepository(database)
+        val accountId = repository.createAccount("现金", AccountType.CASH, 0L, "💵")
+
+        repository.saveTransaction(
+            transactionId = null,
+            amountInCents = 1_000L,
+            type = TransactionType.EXPENSE,
+            categoryId = DefaultData.FOOD,
+            accountId = accountId,
+            date = LocalDate.now().toString(),
+            time = "12:00",
+            note = "透支测试"
+        )
+        val overdrawnAccount = requireNotNull(database.financeDao().getAccount(accountId))
+        repository.updateAccount(overdrawnAccount.copy(name = "备用现金"))
+
+        assertEquals(-1_000L, database.financeDao().getAccount(accountId)?.balanceInCents)
+        database.close()
+    }
+
+    @Test
     fun clearingDemoDataPreservesRealTransactionBalanceEffect() = runBlocking {
         val database = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(),
