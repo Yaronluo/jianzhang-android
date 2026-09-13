@@ -14,19 +14,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -78,8 +73,7 @@ fun AssetsScreen(
     onCreateAccount: (String, AccountType, String, String, Boolean) -> Unit,
     onUpdateAccount: (AccountEntity, String, AccountType, String) -> Unit,
     onRemoveAccount: (String) -> Unit,
-    onAdjustBalance: (AccountEntity, String) -> Unit,
-    onTransfer: () -> Unit
+    onAdjustBalance: (AccountEntity, String) -> Unit
 ) {
     var showDialog by remember { mutableStateOf(false) }
     var editingAccount by remember { mutableStateOf<AccountEntity?>(null) }
@@ -242,20 +236,7 @@ fun AssetsScreen(
         }
         CollapsingTitleHeader(
             title = "资产",
-            collapseProgress = headerCollapseProgress,
-            action = {
-                Surface(
-                    onClick = onTransfer,
-                    modifier = Modifier.size(44.dp),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-                    shadowElevation = 6.dp
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.SwapHoriz, contentDescription = "账户转账", modifier = Modifier.size(24.dp))
-                    }
-                }
-            }
+            collapseProgress = headerCollapseProgress
         )
     }
 }

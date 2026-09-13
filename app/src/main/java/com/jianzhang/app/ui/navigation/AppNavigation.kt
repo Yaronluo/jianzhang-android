@@ -151,6 +151,10 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                         onSave = { id, amount, type, category, account, date, note ->
                             viewModel.saveTransaction(id, amount, type, category, account, date, note)
                             navController.popBackStack()
+                        },
+                        onSaveTransfer = { id, amount, from, to, date, note ->
+                            viewModel.saveTransfer(id, amount, from, to, date, note)
+                            navController.popBackStack()
                         }
                     )
                 }
@@ -167,6 +171,10 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                         onSave = { id, amount, type, category, account, date, note ->
                             viewModel.saveTransaction(id, amount, type, category, account, date, note)
                             navController.popBackStack()
+                        },
+                        onSaveTransfer = { id, amount, from, to, date, note ->
+                            viewModel.saveTransfer(id, amount, from, to, date, note)
+                            navController.popBackStack()
                         }
                     )
                 }
@@ -180,21 +188,7 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                         onCreateAccount = viewModel::createAccount,
                         onUpdateAccount = viewModel::updateAccount,
                         onRemoveAccount = viewModel::removeAccount,
-                        onAdjustBalance = viewModel::adjustAccountBalance,
-                        onTransfer = { navController.navigate("transfer") }
-                    )
-                }
-            }
-            composable("transfer") {
-                ScreenWithInsets(scaffoldPadding = padding) {
-                    TransferScreen(
-                        state = state,
-                        transactionId = null,
-                        onBack = { navController.popBackStack() },
-                        onSave = { id, amount, from, to, date, note ->
-                            viewModel.saveTransfer(id, amount, from, to, date, note)
-                            navController.popBackStack()
-                        }
+                        onAdjustBalance = viewModel::adjustAccountBalance
                     )
                 }
             }
