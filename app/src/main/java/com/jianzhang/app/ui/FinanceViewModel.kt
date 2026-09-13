@@ -253,7 +253,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     fun confirmRecurringExpense(id: String) {
         viewModelScope.launch {
             runCatching { repository.confirmRecurringExpense(id) }
-                .onSuccess { created -> _events.emit(if (created) "已确认记账，账户余额已更新" else "该周期已经记过账") }
+                .onSuccess { created ->
+                    _events.emit(if (created) "已确认记账，账户余额已更新" else "该周期尚未到期或已经记过账")
+                }
                 .onFailure { _events.emit(it.message ?: "确认记账失败") }
         }
     }

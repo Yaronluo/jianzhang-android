@@ -1,32 +1,42 @@
 package com.jianzhang.app.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,29 +44,33 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.jianzhang.app.data.local.entity.AccountEntity
 import com.jianzhang.app.data.local.entity.CategoryType
 import com.jianzhang.app.data.local.entity.RecurringCycle
 import com.jianzhang.app.data.local.entity.RecurringExpenseEntity
+import com.jianzhang.app.data.local.entity.TransactionEntity
 import com.jianzhang.app.data.local.entity.TransactionType
 import com.jianzhang.app.ui.FinanceUiState
 import com.jianzhang.app.ui.components.AppCard
-import com.jianzhang.app.ui.components.BackTitleBar
-import com.jianzhang.app.ui.components.CheckBadge
+import com.jianzhang.app.ui.components.CollapsingTitleHeader
 import com.jianzhang.app.ui.components.EmptyState
-import com.jianzhang.app.util.formatDate
+import com.jianzhang.app.ui.components.RecurringExpenseRow
 import com.jianzhang.app.util.formatMoney
+import com.jianzhang.app.util.formatMonth
 import com.jianzhang.app.util.parseMoneyToCents
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import java.time.YearMonth
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RecurringScreen(
     state: FinanceUiState,
-    onBack: () -> Unit,
+    openAdd: Boolean,
+    onAddConsumed: () -> Unit,
     onSave: (String?, String, String, String?, String?, RecurringCycle, String, String) -> Unit,
     onConfirm: (String) -> Unit,
     onDelete: (String) -> Unit
@@ -64,11 +78,37 @@ fun RecurringScreen(
     var showDialog by remember { mutableStateOf(false) }
     var editingExpense by remember { mutableStateOf<RecurringExpenseEntity?>(null) }
     var pendingDelete by remember { mutableStateOf<RecurringExpenseEntity?>(null) }
-    val monthTransactions = state.transactions.filter { it.date.startsWith(state.selectedMonth) }
-    val recurringIds = state.recurringExpenses.map { it.id }.toSet()
-    val paid = monthTransactions.filter { it.sourceRecurringExpenseId in recurringIds }.sumOf { it.amountInCents }
-    val total = state.recurringExpenses.sumOf { if (it.cycle == RecurringCycle.YEARLY) it.amountInCents / 12 else it.amountInCents }
-    val pending = (total - paid).coerceAtLeast(0L)
+    var openSwipeRecurringId by rememberSaveable { mutableStateOf<String?>(null) }
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    val statusBarInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val floatingControlsClearance = navigationBarInset + 12.dp + 64.dp + 16.dp + 56.dp + 12.dp
+    val headerCollapseDistancePx = with(density) { 68.dp.toPx() }
+    val headerCollapseProgress by remember {
+        derivedStateOf {
+            val scrolledPx = if (listState.firstVisibleItemIndex == 0) {
+                listState.firstVisibleItemScrollOffset.toFloat()
+            } else {
+                headerCollapseDistancePx
+            }
+            (scrolledPx / headerCollapseDistancePx).coerceIn(0f, 1f)
+        }
+    }
+    val currentMonth = YearMonth.from(LocalDate.now())
+    val monthSummaries = remember(state.recurringExpenses, state.transactions, currentMonth) {
+        listOf(currentMonth, currentMonth.plusMonths(1)).map { month ->
+            recurringMonthSummary(month, state.recurringExpenses, state.transactions)
+        }
+    }
+
+    LaunchedEffect(openAdd) {
+        if (openAdd) {
+            editingExpense = null
+            showDialog = true
+            onAddConsumed()
+        }
+    }
 
     if (showDialog) {
         RecurringDialog(
@@ -85,57 +125,142 @@ fun RecurringScreen(
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("删除“${expense.name}”？") },
-            text = { Text("已确认的历史账单不会被删除，只会移除这条固定支出规则。") },
+            text = { Text("已有的历史账单不会被删除，只会移除这条固定支出规则。") },
             confirmButton = {
-                TextButton(onClick = { onDelete(expense.id); pendingDelete = null }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = {
+                    onDelete(expense.id)
+                    openSwipeRecurringId = null
+                    pendingDelete = null
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("取消") } }
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        BackTitleBar(
-            title = "固定支出",
-            onBack = onBack,
-            action = {
-                IconButton(onClick = { editingExpense = null; showDialog = true }) { Icon(Icons.Default.Add, contentDescription = "新增固定支出") }
-            }
-        )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         LazyColumn(
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 20.dp,
+                top = statusBarInset + 112.dp,
+                end = 20.dp,
+                bottom = floatingControlsClearance
+            ),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            item {
-                AppCard {
-                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("本月固定支出", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("${formatMoney(paid)} / ${formatMoney(total)}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                            Text("已支付 ${formatMoney(paid)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                            Text("待支付 ${formatMoney(pending)}", style = MaterialTheme.typography.bodySmall, color = if (pending > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
+            item(key = "recurring-overview") {
+                FixedExpenseOverviewPager(summaries = monthSummaries)
             }
             if (state.recurringExpenses.isEmpty()) {
-                item { EmptyState("🔁", "暂无固定支出", "把房租、套餐等每月必付项目交给简账提醒") }
+                item(key = "recurring-empty") {
+                    EmptyState("🔁", "暂无固定支出", "点击右下角“+”添加房租、套餐等每月必付项目")
+                }
             } else {
                 items(state.recurringExpenses, key = { it.id }) { expense ->
-                    RecurringCard(
+                    RecurringExpenseRow(
                         expense = expense,
                         categoryName = state.categories.firstOrNull { it.id == expense.categoryId }?.name,
-                        account = state.accounts.firstOrNull { it.id == expense.accountId },
+                        accountName = state.accounts.firstOrNull { it.id == expense.accountId }?.name,
                         categoryIcon = state.categories.firstOrNull { it.id == expense.categoryId }?.icon ?: "🔁",
-                        onConfirm = { onConfirm(expense.id) },
+                        onConfirm = {
+                            openSwipeRecurringId = null
+                            onConfirm(expense.id)
+                        },
                         onEdit = { editingExpense = expense; showDialog = true },
-                        onDelete = { pendingDelete = expense }
+                        onDelete = { pendingDelete = expense },
+                        onClick = { editingExpense = expense; showDialog = true },
+                        isSwipeOpen = openSwipeRecurringId == expense.id,
+                        onSwipeOpen = { openSwipeRecurringId = expense.id },
+                        onSwipeClose = {
+                            if (openSwipeRecurringId == expense.id) openSwipeRecurringId = null
+                        }
                     )
                 }
             }
-            item {
-                Button(onClick = { editingExpense = null; showDialog = true }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Text("  新增固定支出")
+            item(key = "recurring-bottom-spacer") { Spacer(modifier = Modifier.height(12.dp)) }
+        }
+        CollapsingTitleHeader(
+            title = "固定支出",
+            collapseProgress = headerCollapseProgress
+        )
+    }
+}
+
+private data class RecurringMonthSummary(
+    val month: YearMonth,
+    val total: Long,
+    val paid: Long,
+    val itemCount: Int
+) {
+    val pending: Long get() = (total - paid).coerceAtLeast(0L)
+}
+
+private fun recurringMonthSummary(
+    month: YearMonth,
+    expenses: List<RecurringExpenseEntity>,
+    transactions: List<TransactionEntity>
+): RecurringMonthSummary {
+    val monthKey = month.toString()
+    val paidByExpenseId = transactions
+        .filter {
+            it.type == TransactionType.EXPENSE &&
+                it.date.startsWith(monthKey) &&
+                it.sourceRecurringExpenseId != null
+        }
+        .groupBy { it.sourceRecurringExpenseId!! }
+        .mapValues { (_, entries) -> entries.sumOf { it.amountInCents } }
+    val scheduled = expenses.filter { expense ->
+        paidByExpenseId.containsKey(expense.id) || recurringOccursInMonth(expense, month)
+    }
+    return RecurringMonthSummary(
+        month = month,
+        total = scheduled.sumOf { paidByExpenseId[it.id] ?: it.amountInCents },
+        paid = scheduled.sumOf { paidByExpenseId[it.id] ?: 0L },
+        itemCount = scheduled.size
+    )
+}
+
+private fun recurringOccursInMonth(expense: RecurringExpenseEntity, month: YearMonth): Boolean {
+    val firstMonth = runCatching { YearMonth.from(LocalDate.parse(expense.nextDate)) }.getOrNull() ?: return true
+    if (month.isBefore(firstMonth)) return false
+    val monthsSinceFirst = ChronoUnit.MONTHS.between(firstMonth, month)
+    return expense.cycle == RecurringCycle.MONTHLY || monthsSinceFirst % 12L == 0L
+}
+
+@Composable
+private fun FixedExpenseOverviewPager(summaries: List<RecurringMonthSummary>) {
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { summaries.size })
+    AppCard(modifier = Modifier.fillMaxWidth()) {
+        Column {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(154.dp)
+            ) { page ->
+                FixedExpenseSummaryPage(
+                    summary = summaries[page],
+                    label = if (page == 0) "本月支出" else "下月支出"
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 7.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                summaries.indices.forEach { page ->
+                    Text(
+                        text = if (page == pagerState.currentPage) "●" else "○",
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 3.dp)
+                    )
                 }
             }
         }
@@ -143,41 +268,28 @@ fun RecurringScreen(
 }
 
 @Composable
-private fun RecurringCard(
-    expense: RecurringExpenseEntity,
-    categoryName: String?,
-    account: AccountEntity?,
-    categoryIcon: String,
-    onConfirm: () -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val today = LocalDate.now()
-    val dueDate = runCatching { LocalDate.parse(expense.nextDate) }.getOrDefault(today)
-    val isDue = !dueDate.isAfter(today)
-    val days = ChronoUnit.DAYS.between(today, dueDate)
-    AppCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(categoryIcon, style = MaterialTheme.typography.headlineSmall)
-                Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-                    Text(expense.name, fontWeight = FontWeight.SemiBold)
-                    Text(listOfNotNull(categoryName, account?.name).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(formatMoney(expense.amountInCents), fontWeight = FontWeight.SemiBold)
+private fun FixedExpenseSummaryPage(summary: RecurringMonthSummary, label: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(formatMonth(summary.month.toString()), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "编辑固定支出") }
-                IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "删除固定支出", tint = MaterialTheme.colorScheme.error) }
-            }
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("每${if (expense.cycle == RecurringCycle.MONTHLY) "月" else "年"} · ${formatDate(expense.nextDate)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (isDue) {
-                    Button(onClick = onConfirm) { Text("确认记账") }
-                } else {
-                    CheckBadge(if (days == 1L) "明天" else "$days 天后")
-                }
-            }
+            Text("${summary.itemCount} 项", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(formatMoney(summary.total), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+            Text("已支付 ${formatMoney(summary.paid)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            Text(
+                if (summary.pending > 0) "待支付 ${formatMoney(summary.pending)}" else "已全部记账",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (summary.pending > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

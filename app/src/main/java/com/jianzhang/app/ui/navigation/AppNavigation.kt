@@ -41,7 +41,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -78,6 +81,8 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val navController = rememberNavController()
+    var recurringAddRequested by rememberSaveable { mutableStateOf(false) }
+    var assetAddRequested by rememberSaveable { mutableStateOf(false) }
     val entry by navController.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: "ledger"
     val snackbarHostState = remember { SnackbarHostState() }
@@ -126,10 +131,11 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                 }
             }
             composable("recurring") {
-                ScreenWithInsets(scaffoldPadding = padding, bottomInset = false) {
+                ScreenWithInsets(scaffoldPadding = padding, topInset = false, bottomInset = false) {
                     RecurringScreen(
                         state = state,
-                        onBack = { navController.popBackStack() },
+                        openAdd = recurringAddRequested,
+                        onAddConsumed = { recurringAddRequested = false },
                         onSave = viewModel::saveRecurringExpense,
                         onConfirm = viewModel::confirmRecurringExpense,
                         onDelete = viewModel::deleteRecurringExpense
@@ -166,9 +172,11 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                 }
             }
             composable("assets") {
-                ScreenWithInsets(scaffoldPadding = padding, bottomInset = false) {
+                ScreenWithInsets(scaffoldPadding = padding, topInset = false, bottomInset = false) {
                     AssetsScreen(
                         state = state,
+                        openAdd = assetAddRequested,
+                        onAddConsumed = { assetAddRequested = false },
                         onCreateAccount = viewModel::createAccount,
                         onUpdateAccount = viewModel::updateAccount,
                         onRemoveAccount = viewModel::removeAccount,
@@ -280,7 +288,15 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                 }
 
                 Surface(
-                    onClick = { navController.navigate("add") },
+                    onClick = {
+                        if (route == "recurring") {
+                            recurringAddRequested = true
+                        } else if (route == "assets") {
+                            assetAddRequested = true
+                        } else {
+                            navController.navigate("add")
+                        }
+                    },
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(
@@ -297,7 +313,11 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Default.Add,
-                            contentDescription = "记账",
+                            contentDescription = when (route) {
+                                "recurring" -> "新增固定支出"
+                                "assets" -> "添加资产"
+                                else -> "记账"
+                            },
                             modifier = Modifier.size(28.dp)
                         )
                     }

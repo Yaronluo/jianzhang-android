@@ -54,7 +54,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -68,6 +67,7 @@ import com.jianzhang.app.data.local.entity.TransactionEntity
 import com.jianzhang.app.data.local.entity.TransactionType
 import com.jianzhang.app.ui.FinanceUiState
 import com.jianzhang.app.ui.components.AppCard
+import com.jianzhang.app.ui.components.CollapsingTitleHeader
 import com.jianzhang.app.ui.components.EmptyState
 import com.jianzhang.app.ui.components.TransactionRow
 import com.jianzhang.app.util.formatDate
@@ -90,6 +90,7 @@ fun LedgerScreen(
 ) {
     var searchText by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf("全部") }
+    var openSwipeTransactionId by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<TransactionEntity?>(null) }
     val monthTransactions = state.transactions.filter { it.date.startsWith(state.selectedMonth) }
     val income = monthTransactions.filter { it.type == TransactionType.INCOME }.sumOf { it.amountInCents }
@@ -344,7 +345,21 @@ fun LedgerScreen(
                                     account = accountMap[transaction.accountId],
                                     toAccount = accountMap[transaction.toAccountId],
                                     onEdit = { onEdit(transaction) },
-                                    onDelete = { pendingDelete = transaction }
+                                    onDelete = {
+                                        openSwipeTransactionId = null
+                                        pendingDelete = transaction
+                                    },
+                                    onClick = {
+                                        openSwipeTransactionId = null
+                                        onEdit(transaction)
+                                    },
+                                    isSwipeOpen = openSwipeTransactionId == transaction.id,
+                                    onSwipeOpen = { openSwipeTransactionId = transaction.id },
+                                    onSwipeClose = {
+                                        if (openSwipeTransactionId == transaction.id) {
+                                            openSwipeTransactionId = null
+                                        }
+                                    }
                                 )
                             }
                         }
@@ -354,97 +369,25 @@ fun LedgerScreen(
         }
         item { Spacer(modifier = Modifier.height(12.dp)) }
         }
-        LedgerCollapsingHeader(
+        CollapsingTitleHeader(
+            title = "账本",
             collapseProgress = headerCollapseProgress,
-            onOpenSettings = onOpenSettings
-        )
-    }
-}
-
-@Composable
-private fun LedgerCollapsingHeader(
-    collapseProgress: Float,
-    onOpenSettings: () -> Unit
-) {
-    val progress = collapseProgress
-    val statusBarInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val largeTitleProgress = smoothStep((progress / 0.52f).coerceIn(0f, 1f))
-    val compactTitleProgress = smoothStep(((progress - 0.60f) / 0.40f).coerceIn(0f, 1f))
-    val frostProgress = smoothStep(progress)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(statusBarInset + 104.dp)
-            .zIndex(3f)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    alpha = 1f - largeTitleProgress
-                    translationY = -48.dp.toPx() * largeTitleProgress
+            action = {
+                Surface(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.size(44.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                    shadowElevation = 6.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Settings, contentDescription = "设置", modifier = Modifier.size(24.dp))
+                    }
                 }
-        ) {
-            Text(
-                "账本",
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 20.dp, bottom = 10.dp),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(statusBarInset + 128.dp)
-                .align(Alignment.TopCenter)
-                .zIndex(1f)
-                .graphicsLayer { alpha = frostProgress }
-                .background(
-                    Brush.verticalGradient(
-                        colorStops = arrayOf(
-                            0f to MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                            0.28f to MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                            0.58f to MaterialTheme.colorScheme.surface.copy(alpha = 0.68f),
-                            0.82f to MaterialTheme.colorScheme.surface.copy(alpha = 0.30f),
-                            1f to MaterialTheme.colorScheme.surface.copy(alpha = 0f)
-                        )
-                    )
-                )
-        )
-        Text(
-            "账本",
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = statusBarInset + 18.dp)
-                .zIndex(2f)
-                .graphicsLayer {
-                    alpha = compactTitleProgress
-                    translationY = 10.dp.toPx() * (1f - compactTitleProgress)
-                },
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
-        Surface(
-            onClick = onOpenSettings,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = statusBarInset + 8.dp, end = 12.dp)
-                .size(44.dp)
-                .zIndex(2f),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-            shadowElevation = 6.dp
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Settings, contentDescription = "设置", modifier = Modifier.size(24.dp))
             }
-        }
+        )
     }
 }
-
-private fun smoothStep(value: Float): Float = value * value * (3f - 2f * value)
 
 @Composable
 private fun MonthNavigationButton(symbol: String, description: String, onClick: () -> Unit) {
