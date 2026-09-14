@@ -150,6 +150,30 @@ class StatisticsCalculationTest {
     }
 
     @Test
+    fun excludedAccountDoesNotContributeToNetWorthSnapshot() {
+        val included = AccountEntity(
+            id = "included",
+            name = "银行卡",
+            type = AccountType.BANK_CARD,
+            balanceInCents = 2_000L,
+            icon = "🏦",
+            createdAt = 0L,
+            updatedAt = 0L
+        )
+        val excluded = included.copy(
+            id = "excluded",
+            name = "备用账户",
+            balanceInCents = 9_000L,
+            includeInNetWorth = false
+        )
+
+        val snapshot = assetSnapshot(listOf(included, excluded))
+
+        assertEquals(2_000L, snapshot.totalAssets)
+        assertEquals(0L, snapshot.totalLiabilities)
+    }
+
+    @Test
     fun topCategorySlicesKeepsOnlyOneCombinedOtherEntry() {
         val slices = listOf(
             CategorySlice("餐饮", "🍜", 900L),

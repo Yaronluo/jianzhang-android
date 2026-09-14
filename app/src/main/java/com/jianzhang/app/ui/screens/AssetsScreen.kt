@@ -1,6 +1,8 @@
 package com.jianzhang.app.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,16 +14,31 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
+import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -38,8 +55,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.dp
 import com.jianzhang.app.data.local.entity.AccountEntity
 import com.jianzhang.app.data.local.entity.AccountType
@@ -50,6 +71,8 @@ import com.jianzhang.app.ui.components.CollapsingTitleHeader
 import com.jianzhang.app.ui.components.EmptyState
 import com.jianzhang.app.util.formatInputMoney
 import com.jianzhang.app.util.formatMoney
+import com.jianzhang.app.util.parseMoneyToCents
+import com.jianzhang.app.util.parseMoneyToCentsOrZero
 
 private enum class AssetFilter(val label: String) {
     FUNDS("资金"),
@@ -65,13 +88,37 @@ private fun AccountEntity.assetFilter(): AssetFilter = when (type) {
     AccountType.CASH, AccountType.BANK_CARD -> AssetFilter.FUNDS
 }
 
+private data class AccountTypeOption(
+    val type: AccountType,
+    val label: String,
+    val legacyIcon: String
+)
+
+private val accountTypeOptions = listOf(
+    AccountTypeOption(AccountType.CASH, "现金", "💵"),
+    AccountTypeOption(AccountType.BANK_CARD, "银行卡", "🏦"),
+    AccountTypeOption(AccountType.ALIPAY, "支付宝", "🟦"),
+    AccountTypeOption(AccountType.WECHAT, "微信", "🟩"),
+    AccountTypeOption(AccountType.CREDIT_CARD, "信用卡", "💳"),
+    AccountTypeOption(AccountType.OTHER, "理财", "📈")
+)
+
+private val AssetEditorAccent = Color(0xFFFFC107)
+
+private fun accountTypeIcon(type: AccountType): ImageVector = when (type) {
+    AccountType.CASH, AccountType.BANK_CARD -> Icons.Outlined.AccountBalance
+    AccountType.ALIPAY, AccountType.WECHAT -> Icons.Outlined.AccountBalanceWallet
+    AccountType.CREDIT_CARD -> Icons.Outlined.CreditCard
+    AccountType.OTHER -> Icons.AutoMirrored.Outlined.ShowChart
+}
+
 @Composable
 fun AssetsScreen(
     state: FinanceUiState,
     openAdd: Boolean,
     onAddConsumed: () -> Unit,
-    onCreateAccount: (String, AccountType, String, String, Boolean) -> Unit,
-    onUpdateAccount: (AccountEntity, String, AccountType, String) -> Unit,
+    onCreateAccount: (String, AccountType, String, String, Boolean, String, String, Boolean, Boolean) -> Unit,
+    onUpdateAccount: (AccountEntity, String, AccountType, String, String, String, Boolean, Boolean) -> Unit,
     onRemoveAccount: (String) -> Unit,
     onAdjustBalance: (AccountEntity, String) -> Unit
 ) {
@@ -84,8 +131,9 @@ fun AssetsScreen(
 
     val selectedFilter = AssetFilter.values().firstOrNull { it.name == filterName } ?: AssetFilter.FUNDS
     val visibleAccounts = state.accounts.filter { it.assetFilter() == selectedFilter }
-    val totalAssets = state.accounts.sumOf { it.balanceInCents.coerceAtLeast(0L) }
-    val totalLiabilities = state.accounts.sumOf { (-it.balanceInCents).coerceAtLeast(0L) }
+    val netWorthAccounts = state.accounts.filter { it.includeInNetWorth }
+    val totalAssets = netWorthAccounts.sumOf { it.balanceInCents.coerceAtLeast(0L) }
+    val totalLiabilities = netWorthAccounts.sumOf { (-it.balanceInCents).coerceAtLeast(0L) }
     val netWorth = totalAssets - totalLiabilities
 
     LaunchedEffect(openAdd) {
@@ -97,14 +145,33 @@ fun AssetsScreen(
     }
 
     if (showDialog) {
-        AccountDialog(
+        AccountEditorDialog(
             existing = editingAccount,
             onDismiss = { showDialog = false; editingAccount = null },
-            onSave = { existing, name, type, balance, icon ->
+            onSave = { existing, name, type, balance, icon, currencyCode, note, includeInNetWorth, canUseForTransactions ->
                 if (existing == null) {
-                    onCreateAccount(name, type, balance, icon, type == AccountType.CREDIT_CARD)
+                    onCreateAccount(
+                        name,
+                        type,
+                        balance,
+                        icon,
+                        type == AccountType.CREDIT_CARD,
+                        currencyCode,
+                        note,
+                        includeInNetWorth,
+                        canUseForTransactions
+                    )
                 } else {
-                    onUpdateAccount(existing, name, type, icon)
+                    onUpdateAccount(
+                        existing,
+                        name,
+                        type,
+                        icon,
+                        currencyCode,
+                        note,
+                        includeInNetWorth,
+                        canUseForTransactions
+                    )
                 }
                 showDialog = false
                 editingAccount = null
@@ -292,95 +359,381 @@ private fun NetWorthMetric(label: String, value: String, color: Color, modifier:
 }
 
 @Composable
-private fun AccountDialog(
+private fun AccountEditorDialog(
     existing: AccountEntity?,
     onDismiss: () -> Unit,
-    onSave: (AccountEntity?, String, AccountType, String, String) -> Unit
+    onSave: (AccountEntity?, String, AccountType, String, String, String, String, Boolean, Boolean) -> Unit
 ) {
     var name by rememberSaveable(existing?.id) { mutableStateOf(existing?.name ?: "") }
     var balance by rememberSaveable(existing?.id) {
         mutableStateOf(existing?.let { formatInputMoney(kotlin.math.abs(it.balanceInCents)) } ?: "0")
     }
     var typeName by rememberSaveable(existing?.id) { mutableStateOf(existing?.type?.name ?: AccountType.CASH.name) }
+    var currencyCode by rememberSaveable(existing?.id) { mutableStateOf(existing?.currencyCode ?: "CNY") }
+    var note by rememberSaveable(existing?.id) { mutableStateOf(existing?.note ?: "") }
+    var includeInNetWorth by rememberSaveable(existing?.id) { mutableStateOf(existing?.includeInNetWorth ?: true) }
+    var canUseForTransactions by rememberSaveable(existing?.id) { mutableStateOf(existing?.canUseForTransactions ?: true) }
+    var showIconChoices by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+
     val type = runCatching { AccountType.valueOf(typeName) }.getOrDefault(AccountType.CASH)
-    val options = listOf(
-        AccountType.CASH to ("现金" to "💵"),
-        AccountType.ALIPAY to ("支付宝" to "🟦"),
-        AccountType.WECHAT to ("微信" to "🟩"),
-        AccountType.BANK_CARD to ("银行卡" to "🏦"),
-        AccountType.CREDIT_CARD to ("信用卡" to "💳"),
-        AccountType.OTHER to ("理财" to "📈")
-    )
-    AlertDialog(
+    val selectedType = accountTypeOptions.firstOrNull { it.type == type } ?: accountTypeOptions.first()
+    val canSubmit = name.isNotBlank()
+
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (existing == null) "添加资产" else "编辑资产") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text("资产名称") },
-                    placeholder = { Text("例如：工商银行") }
-                )
-                Text("资产类型", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    options.take(3).forEach { (option, display) ->
-                        FilterChip(
-                            selected = type == option,
-                            onClick = { typeName = option.name },
-                            label = { Text(display.first) }
-                        )
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    options.drop(3).forEach { (option, display) ->
-                        FilterChip(
-                            selected = type == option,
-                            onClick = { typeName = option.name },
-                            label = { Text(display.first) }
-                        )
-                    }
-                }
-                OutlinedTextField(
-                    value = balance,
-                    onValueChange = { balance = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    readOnly = existing != null,
-                    label = {
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 12.dp),
+            shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.surface,
+                        shadowElevation = 1.dp
+                    ) {
                         Text(
-                            if (existing != null) "当前余额"
-                            else if (type == AccountType.CREDIT_CARD) "初始欠款"
-                            else "初始余额"
+                            "取消",
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp),
+                            style = MaterialTheme.typography.titleSmall
                         )
-                    },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-                if (existing != null) {
-                    Text(
-                        "编辑资产不会改变余额；点击资产卡片可调整余额。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    }
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        Text(
+                            if (existing == null) "添加资产" else "编辑资产",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Surface(
+                        onClick = {
+                            if (!canSubmit) {
+                                error = "请填写资产名称"
+                            } else if (existing == null && parseMoneyToCentsOrZero(balance) == null) {
+                                error = "请输入正确的初始余额"
+                            } else {
+                                error = ""
+                                onSave(
+                                    existing,
+                                    name.trim(),
+                                    type,
+                                    balance,
+                                    selectedType.legacyIcon,
+                                    currencyCode,
+                                    note.trim(),
+                                    includeInNetWorth,
+                                    canUseForTransactions
+                                )
+                            }
+                        },
+                        shape = RoundedCornerShape(50),
+                        color = if (canSubmit) AssetEditorAccent else MaterialTheme.colorScheme.surface,
+                        contentColor = if (canSubmit) Color(0xFF3A2B00) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f),
+                        shadowElevation = if (canSubmit) 1.dp else 0.dp
+                    ) {
+                        Text(
+                            if (existing == null) "添加" else "保存",
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
-                if (error.isNotBlank()) {
-                    Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .imePadding()
+                        .padding(horizontal = 20.dp, vertical = 2.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    EditorSectionTitle("类型")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        accountTypeOptions.forEach { option ->
+                            val selected = option.type == type
+                            Surface(
+                                onClick = { typeName = option.type.name },
+                                shape = RoundedCornerShape(50),
+                                color = if (selected) AssetEditorAccent else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (selected) Color(0xFF3A2B00) else MaterialTheme.colorScheme.onSurface
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(accountTypeIcon(option.type), contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Text(option.label, style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
+                        }
+                    }
+
+                    EditorSectionTitle("基本信息")
+                    EditorCard {
+                        Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showIconChoices = !showIconChoices }
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("图标", style = MaterialTheme.typography.titleSmall)
+                            Spacer(modifier = Modifier.weight(1f))
+                            Surface(
+                                modifier = Modifier.size(40.dp),
+                                shape = androidx.compose.foundation.shape.CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = accountTypeIcon(type),
+                                        contentDescription = "选择图标",
+                                        modifier = Modifier.size(22.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                        if (showIconChoices) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                accountTypeOptions.forEach { option ->
+                                    Surface(
+                                        onClick = {
+                                            typeName = option.type.name
+                                            showIconChoices = false
+                                        },
+                                        modifier = Modifier.size(38.dp),
+                                        shape = androidx.compose.foundation.shape.CircleShape,
+                                        color = if (option.type == type) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.background
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = accountTypeIcon(option.type),
+                                                contentDescription = option.label,
+                                                modifier = Modifier.size(20.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        EditorTextRow(
+                            label = "名称",
+                            value = name,
+                            placeholder = when (type) {
+                                AccountType.CASH -> "例如：日常现金"
+                                AccountType.BANK_CARD -> "例如：招商银行"
+                                AccountType.ALIPAY -> "例如：支付宝"
+                                AccountType.WECHAT -> "例如：微信"
+                                AccountType.CREDIT_CARD -> "例如：招商信用卡"
+                                AccountType.OTHER -> "例如：基金账户"
+                            },
+                            onValueChange = { name = it },
+                            keyboardType = KeyboardType.Text
+                        )
+                    }
+
+                    EditorSectionTitle("金额")
+                    EditorCard {
+                        EditorTextRow(
+                            label = if (type == AccountType.CREDIT_CARD) "当前欠款" else "当前余额",
+                            value = balance,
+                            placeholder = "0",
+                            onValueChange = { balance = it },
+                            keyboardType = KeyboardType.Decimal,
+                            readOnly = existing != null,
+                            labelColor = AssetEditorAccent
+                        )
+                        if (existing != null) {
+                            Text(
+                                "编辑资产不会改变余额；点击资产卡片可调整余额。",
+                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    EditorSectionTitle("币种")
+                    EditorCard {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 11.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("币种", style = MaterialTheme.typography.titleSmall)
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                "¥ $currencyCode",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    EditorSectionTitle("附加信息")
+                    EditorCard {
+                        EditorTextRow(
+                            label = "备注",
+                            value = note,
+                            placeholder = "可选",
+                            onValueChange = { note = it },
+                            keyboardType = KeyboardType.Text
+                        )
+                    }
+
+                    EditorCard {
+                        EditorSwitchRow("计入净资产", includeInNetWorth) { includeInNetWorth = it }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+                        EditorSwitchRow("可选为交易账户", canUseForTransactions) { canUseForTransactions = it }
+                    }
+
+                    if (error.isNotBlank()) {
+                        Text(
+                            error,
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                error = if (name.isBlank()) "请填写资产名称" else ""
-                if (error.isBlank()) {
-                    onSave(existing, name, type, balance, options.firstOrNull { it.first == type }?.second?.second ?: "💼")
-                }
-            }) { Text("保存") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+        }
+    }
+}
+
+@Composable
+private fun EditorSectionTitle(title: String) {
+    Text(
+        title,
+        modifier = Modifier.padding(start = 8.dp, top = 4.dp),
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
     )
+}
+
+@Composable
+private fun EditorCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        Column(content = content)
+    }
+}
+
+@Composable
+private fun EditorTextRow(
+    label: String,
+    value: String,
+    placeholder: String,
+    onValueChange: (String) -> Unit,
+    keyboardType: KeyboardType,
+    readOnly: Boolean = false,
+    labelColor: Color = MaterialTheme.colorScheme.onSurface
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.titleSmall, color = labelColor)
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 16.dp),
+            enabled = true,
+            readOnly = readOnly,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.End
+            ),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.CenterEnd
+                ) {
+                    if (value.isBlank()) {
+                        Text(
+                            placeholder,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
+                            textAlign = TextAlign.End
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun EditorSwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        )
+    }
 }
 
 @Composable

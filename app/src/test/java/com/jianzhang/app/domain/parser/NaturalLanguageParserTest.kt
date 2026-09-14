@@ -1,6 +1,7 @@
 package com.jianzhang.app.domain.parser
 
 import com.jianzhang.app.data.local.entity.TransactionType
+import com.jianzhang.app.data.model.DefaultData
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
@@ -60,5 +61,43 @@ class NaturalLanguageParserTest {
 
         assertNotNull(result)
         assertEquals("2026-02-01", result?.date)
+    }
+
+    @Test
+    fun parsesExpandedExpenseCategories() {
+        val cases = listOf(
+            "手机话费花了1元" to DefaultData.COMMUNICATION,
+            "买衣服花了1元" to DefaultData.CLOTHING,
+            "日用品花了1元" to DefaultData.DAILY,
+            "家庭用品花了1元" to DefaultData.FAMILY,
+            "健身花了1元" to DefaultData.SPORTS,
+            "买宠物粮花了1元" to DefaultData.PET,
+            "旅游花了1元" to DefaultData.TRAVEL,
+            "汽车加油花了1元" to DefaultData.CAR,
+            "水电费花了1元" to DefaultData.UTILITIES,
+            "会员费花了1元" to DefaultData.SUBSCRIPTION,
+            "随礼花了1元" to DefaultData.SOCIAL,
+            "保费花了1元" to DefaultData.INSURANCE
+        )
+
+        cases.forEach { (text, categoryId) ->
+            assertEquals(text, categoryId, NaturalLanguageParser.parse(text, today)?.categoryId)
+        }
+    }
+
+    @Test
+    fun parsesExpandedIncomeCategories() {
+        val cases = listOf(
+            "收到投资收益1元" to DefaultData.INVESTMENT_INCOME,
+            "收到红包1元" to DefaultData.RED_PACKET,
+            "收到报销款1元" to DefaultData.REIMBURSEMENT,
+            "收到退款1元" to DefaultData.REFUND,
+            "收到租金1元" to DefaultData.RENT,
+            "别人转账给我1元" to DefaultData.TRANSFER_INCOME
+        )
+
+        cases.forEach { (text, categoryId) ->
+            assertEquals(text, categoryId, NaturalLanguageParser.parse(text, today)?.categoryId)
+        }
     }
 }

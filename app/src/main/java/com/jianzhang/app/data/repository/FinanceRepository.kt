@@ -28,6 +28,9 @@ class FinanceRepository(private val database: AppDatabase) {
 
     suspend fun ensureDefaults() {
         dao.insertCategories(DefaultData.categories)
+        DefaultData.categories.forEach { category ->
+            dao.updateCategoryPresentation(category.id, category.icon, category.sortOrder)
+        }
     }
 
     suspend fun saveTransaction(
@@ -95,7 +98,11 @@ class FinanceRepository(private val database: AppDatabase) {
         initialBalanceInCents: Long,
         icon: String,
         isLiability: Boolean = false,
-        isDemo: Boolean = false
+        isDemo: Boolean = false,
+        currencyCode: String = "CNY",
+        note: String = "",
+        includeInNetWorth: Boolean = true,
+        canUseForTransactions: Boolean = true
     ): String {
         val now = System.currentTimeMillis()
         val id = newId("account")
@@ -109,7 +116,11 @@ class FinanceRepository(private val database: AppDatabase) {
                 isLiability = isLiability,
                 isDemo = isDemo,
                 createdAt = now,
-                updatedAt = now
+                updatedAt = now,
+                currencyCode = currencyCode,
+                note = note,
+                includeInNetWorth = includeInNetWorth,
+                canUseForTransactions = canUseForTransactions
             )
         )
         return id

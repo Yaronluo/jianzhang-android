@@ -56,6 +56,9 @@ fun TransferScreen(
     var amountError by remember { mutableStateOf(false) }
     var dateError by remember { mutableStateOf(false) }
     var accountsError by remember { mutableStateOf(false) }
+    val availableAccounts = state.accounts.filter {
+        it.canUseForTransactions || it.id == fromId || it.id == toId
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         BackTitleBar(title = if (editing == null) "账户转账" else "编辑转账", onBack = onBack)
@@ -84,10 +87,10 @@ fun TransferScreen(
                 }
             }
             item {
-                AccountPicker("转出账户", state.accounts, fromId, excludedId = toId, onSelected = { fromId = it; accountsError = false })
+                AccountPicker("转出账户", availableAccounts, fromId, excludedId = toId, onSelected = { fromId = it; accountsError = false })
             }
             item {
-                AccountPicker("转入账户", state.accounts, toId, excludedId = fromId, onSelected = { toId = it; accountsError = false })
+                AccountPicker("转入账户", availableAccounts, toId, excludedId = fromId, onSelected = { toId = it; accountsError = false })
             }
             item {
                 OutlinedTextField(
@@ -120,10 +123,10 @@ fun TransferScreen(
                         accountsError = fromId == null || toId == null || fromId == toId
                         if (!amountError && !dateError && !accountsError) onSave(transactionId, amount, fromId, toId, date, note)
                     },
-                    enabled = state.accounts.size >= 2,
+                    enabled = availableAccounts.size >= 2,
                     modifier = Modifier.fillMaxWidth()
                 ) { Text(if (editing == null) "确认转账" else "保存修改") }
-                if (state.accounts.size < 2) {
+                if (availableAccounts.size < 2) {
                     Text("至少需要两个账户才能转账。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

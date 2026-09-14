@@ -42,6 +42,9 @@ interface FinanceDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertCategories(categories: List<CategoryEntity>)
 
+    @Query("UPDATE categories SET icon = :icon, sortOrder = :sortOrder WHERE id = :id")
+    suspend fun updateCategoryPresentation(id: String, icon: String, sortOrder: Int)
+
     @Query("SELECT * FROM accounts WHERE enabled = 1 ORDER BY isLiability ASC, name ASC")
     fun observeAccounts(): Flow<List<AccountEntity>>
 

@@ -470,7 +470,23 @@ fun TransactionRow(
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
         ) {
-            Text(if (isTransfer) "↔️" else category?.icon ?: "🧾", style = MaterialTheme.typography.bodyLarge)
+            if (isTransfer) {
+                // Keep account-to-account transfers visually distinct from the
+                // incoming income category while preserving their semantics.
+                Icon(
+                    imageVector = AccountTransferIcon,
+                    contentDescription = "账户转账",
+                    modifier = Modifier.size(21.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                CategoryIcon(
+                    categoryId = category?.id,
+                    categoryName = category?.name,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         Column(modifier = Modifier.weight(1f).padding(start = 10.dp, end = 8.dp)) {
             Text(
@@ -520,7 +536,7 @@ fun RecurringExpenseRow(
     expense: RecurringExpenseEntity,
     categoryName: String?,
     accountName: String?,
-    categoryIcon: String,
+    categoryId: String?,
     onConfirm: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -558,7 +574,12 @@ fun RecurringExpenseRow(
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
         ) {
-            Text(categoryIcon, style = MaterialTheme.typography.bodyLarge)
+            CategoryIcon(
+                categoryId = categoryId,
+                categoryName = categoryName,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         Column(modifier = Modifier.weight(1f).padding(start = 10.dp, end = 8.dp)) {
             Text(

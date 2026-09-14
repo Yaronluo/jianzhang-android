@@ -128,10 +128,32 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun createAccount(name: String, type: AccountType, initialBalanceText: String, icon: String, isLiability: Boolean = false) {
+    fun createAccount(
+        name: String,
+        type: AccountType,
+        initialBalanceText: String,
+        icon: String,
+        isLiability: Boolean = false,
+        currencyCode: String = "CNY",
+        note: String = "",
+        includeInNetWorth: Boolean = true,
+        canUseForTransactions: Boolean = true
+    ) {
         val balance = parseMoneyToCents(initialBalanceText) ?: 0L
         viewModelScope.launch {
-            runCatching { repository.createAccount(name.trim(), type, if (isLiability) -balance else balance, icon, isLiability) }
+            runCatching {
+                repository.createAccount(
+                    name = name.trim(),
+                    type = type,
+                    initialBalanceInCents = if (isLiability) -balance else balance,
+                    icon = icon,
+                    isLiability = isLiability,
+                    currencyCode = currencyCode,
+                    note = note.trim(),
+                    includeInNetWorth = includeInNetWorth,
+                    canUseForTransactions = canUseForTransactions
+                )
+            }
                 .onFailure { _events.emit(it.message ?: "账户创建失败") }
         }
     }
@@ -166,7 +188,16 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun updateAccount(account: AccountEntity, name: String, type: AccountType, icon: String) {
+    fun updateAccount(
+        account: AccountEntity,
+        name: String,
+        type: AccountType,
+        icon: String,
+        currencyCode: String,
+        note: String,
+        includeInNetWorth: Boolean,
+        canUseForTransactions: Boolean
+    ) {
         viewModelScope.launch {
             runCatching {
                 repository.updateAccount(
@@ -174,7 +205,11 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                         name = name.trim(),
                         type = type,
                         icon = icon,
-                        isLiability = type == AccountType.CREDIT_CARD
+                        isLiability = type == AccountType.CREDIT_CARD,
+                        currencyCode = currencyCode,
+                        note = note.trim(),
+                        includeInNetWorth = includeInNetWorth,
+                        canUseForTransactions = canUseForTransactions
                     )
                 )
             }.onFailure { _events.emit(it.message ?: "账户保存失败") }

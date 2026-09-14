@@ -2,6 +2,7 @@ package com.jianzhang.app.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,13 +10,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -26,7 +32,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -46,10 +55,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.jianzhang.app.data.local.entity.AccountEntity
 import com.jianzhang.app.data.local.entity.CategoryEntity
 import com.jianzhang.app.data.local.entity.CategoryType
@@ -57,11 +69,16 @@ import com.jianzhang.app.data.local.entity.TransactionType
 import com.jianzhang.app.domain.parser.NaturalLanguageParser
 import com.jianzhang.app.domain.parser.ParsedTransaction
 import com.jianzhang.app.ui.FinanceUiState
+import com.jianzhang.app.ui.components.CategoryIcon
 import com.jianzhang.app.util.formatDate
 import com.jianzhang.app.util.formatInputMoney
 import com.jianzhang.app.util.formatMoney
 import com.jianzhang.app.util.parseMoneyToCents
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 private val entryTypes = listOf(
     TransactionType.EXPENSE to "支出",
@@ -69,13 +86,23 @@ private val entryTypes = listOf(
     TransactionType.TRANSFER to "转账"
 )
 
+private val EntryBackdropColor = Color(0xFFBFC0C4)
+private val EntrySheetColor = Color(0xFFFCFCFE)
+private val EntryMutedColor = Color(0xFF98989F)
+private val EntryActionColor = Color(0xFFE9E9EE)
+private val EntryExpenseColor = Color(0xFFFF555F)
+private val EntryAccountColor = Color(0xFFFFF1CD)
+private val EntryAccountContentColor = Color(0xFFE4A721)
+
 @Composable
 fun AddTransactionScreen(
     state: FinanceUiState,
     transactionId: String?,
     onBack: () -> Unit,
     onSave: (String?, String, TransactionType, String?, String?, String, String) -> Unit,
-    onSaveTransfer: (String?, String, String?, String?, String, String) -> Unit
+    onSaveTransfer: (String?, String, String?, String?, String, String) -> Unit,
+    onSaveAndContinue: (String?, String, TransactionType, String?, String?, String, String) -> Unit,
+    onSaveTransferAndContinue: (String?, String, String?, String?, String, String) -> Unit
 ) {
     val editing = remember(state.transactions, transactionId) {
         state.transactions.firstOrNull { it.id == transactionId }
@@ -90,8 +117,11 @@ fun AddTransactionScreen(
     var accountId by rememberSaveable(transactionId) { mutableStateOf(editing?.accountId) }
     var fromAccountId by rememberSaveable(transactionId) { mutableStateOf(editing?.accountId) }
     var toAccountId by rememberSaveable(transactionId) { mutableStateOf(editing?.toAccountId) }
+    var defaultAccountApplied by rememberSaveable(transactionId) { mutableStateOf(editing != null) }
     var date by rememberSaveable(transactionId) { mutableStateOf(editing?.date ?: LocalDate.now().toString()) }
     var note by rememberSaveable(transactionId) { mutableStateOf(editing?.note ?: "") }
+    var pendingOperand by remember { mutableStateOf<String?>(null) }
+    var pendingOperator by remember { mutableStateOf<String?>(null) }
     var showDateDialog by remember { mutableStateOf(false) }
     var showNoteDialog by remember { mutableStateOf(false) }
     var showNaturalDialog by remember { mutableStateOf(false) }
@@ -103,8 +133,75 @@ fun AddTransactionScreen(
         it.type == if (type == TransactionType.INCOME) CategoryType.INCOME else CategoryType.EXPENSE
     }
     val amountColor = when (type) {
-        TransactionType.EXPENSE -> MaterialTheme.colorScheme.error
+        TransactionType.EXPENSE -> EntryExpenseColor
         TransactionType.INCOME, TransactionType.TRANSFER -> MaterialTheme.colorScheme.primary
+    }
+    val availableAccounts = state.accounts.filter {
+        it.canUseForTransactions || it.id == accountId || it.id == fromAccountId || it.id == toAccountId
+    }
+    val timeLabel = remember(transactionId) {
+        editing?.time ?: LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+    }
+
+    fun resolvedAmount(): String? = when {
+        pendingOperand == null || pendingOperator == null -> amountText
+        amountText.isBlank() -> pendingOperand
+        else -> calculateAmount(pendingOperand.orEmpty(), amountText, pendingOperator.orEmpty())
+    }
+
+    fun applyOperation(operator: String) {
+        if (amountText.isBlank()) {
+            if (pendingOperand != null) pendingOperator = operator
+            return
+        }
+        if (parseMoneyToCents(amountText) == null) {
+            amountError = true
+            return
+        }
+        val previousOperand = pendingOperand
+        val previousOperator = pendingOperator
+        if (previousOperand != null && previousOperator != null) {
+            val result = calculateAmount(previousOperand, amountText, previousOperator)
+            if (result == null) {
+                amountError = true
+                return
+            }
+            pendingOperand = result
+        } else {
+            pendingOperand = amountText
+        }
+        amountText = ""
+        pendingOperator = operator
+        amountError = false
+    }
+
+    fun submit(keepEditing: Boolean) {
+        val amountForSave = resolvedAmount().orEmpty()
+        amountError = parseMoneyToCents(amountForSave) == null
+        dateError = runCatching { LocalDate.parse(date) }.isFailure
+        accountsError = type == TransactionType.TRANSFER &&
+            (fromAccountId == null || toAccountId == null || fromAccountId == toAccountId)
+        if (amountError || dateError || accountsError) return
+
+        if (type == TransactionType.TRANSFER) {
+            if (keepEditing) {
+                onSaveTransferAndContinue(transactionId, amountForSave, fromAccountId, toAccountId, date, note)
+            } else {
+                onSaveTransfer(transactionId, amountForSave, fromAccountId, toAccountId, date, note)
+            }
+        } else {
+            if (keepEditing) {
+                onSaveAndContinue(transactionId, amountForSave, type, categoryId, accountId, date, note)
+            } else {
+                onSave(transactionId, amountForSave, type, categoryId, accountId, date, note)
+            }
+        }
+        if (keepEditing) {
+            amountText = ""
+            note = ""
+            pendingOperand = null
+            pendingOperator = null
+        }
     }
 
     LaunchedEffect(categories, type) {
@@ -112,17 +209,20 @@ fun AddTransactionScreen(
             categoryId = categories.firstOrNull()?.id
         }
     }
-    LaunchedEffect(state.accounts, type) {
-        val validIds = state.accounts.mapTo(mutableSetOf()) { it.id }
+    LaunchedEffect(state.accounts, type, accountId, fromAccountId, toAccountId) {
+        val validIds = availableAccounts.mapTo(mutableSetOf()) { it.id }
         if (type == TransactionType.TRANSFER) {
             if (fromAccountId !in validIds) {
-                fromAccountId = accountId?.takeIf { it in validIds } ?: state.accounts.firstOrNull()?.id
+                fromAccountId = accountId?.takeIf { it in validIds } ?: availableAccounts.firstOrNull()?.id
             }
             if (toAccountId !in validIds || toAccountId == fromAccountId) {
-                toAccountId = state.accounts.firstOrNull { it.id != fromAccountId }?.id
+                toAccountId = availableAccounts.firstOrNull { it.id != fromAccountId }?.id
             }
-        } else if (accountId !in validIds) {
-            accountId = state.accounts.firstOrNull()?.id
+        } else if (!defaultAccountApplied) {
+            accountId = availableAccounts.firstOrNull()?.id
+            defaultAccountApplied = true
+        } else if (accountId != null && accountId !in validIds) {
+            accountId = availableAccounts.firstOrNull()?.id
         }
     }
 
@@ -164,12 +264,20 @@ fun AddTransactionScreen(
         )
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        color = MaterialTheme.colorScheme.background
+    val statusBarInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(EntryBackdropColor)
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = statusBarInset + 10.dp),
+            shape = RoundedCornerShape(topStart = 38.dp, topEnd = 38.dp),
+            color = EntrySheetColor
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
             EntryHeader(
                 selectedType = type,
                 allowTransfer = editing == null,
@@ -184,13 +292,13 @@ fun AddTransactionScreen(
 
             if (type == TransactionType.TRANSFER) {
                 TransferAccountArea(
-                    accounts = state.accounts,
+                    accounts = availableAccounts,
                     fromAccountId = fromAccountId,
                     toAccountId = toAccountId,
                     onFromSelected = {
                         fromAccountId = it
                         if (toAccountId == it) {
-                            toAccountId = state.accounts.firstOrNull { account -> account.id != it }?.id
+                            toAccountId = availableAccounts.firstOrNull { account -> account.id != it }?.id
                         }
                         accountsError = false
                     },
@@ -210,20 +318,23 @@ fun AddTransactionScreen(
             }
 
             EntryMetadataRow(
-                accounts = state.accounts,
+                accounts = availableAccounts,
                 selectedAccountId = accountId,
-                type = type,
-                date = date,
-                note = note,
                 onAccountSelected = { accountId = it },
+                showAccount = type != TransactionType.TRANSFER,
                 onEditDate = { showDateDialog = true },
-                onEditNote = { showNoteDialog = true }
+                onEditNote = { showNoteDialog = true },
+                onNaturalEntry = { showNaturalDialog = true }
             )
 
             AmountDisplay(
                 amountText = amountText,
-                type = type,
                 color = amountColor,
+                date = date,
+                timeLabel = timeLabel,
+                note = note,
+                onEditDate = { showDateDialog = true },
+                onEditNote = { showNoteDialog = true },
                 amountError = amountError,
                 dateError = dateError,
                 accountsError = accountsError
@@ -236,28 +347,21 @@ fun AddTransactionScreen(
                     amountText = appendAmountToken(amountText, it)
                     amountError = false
                 },
+                onOperation = ::applyOperation,
                 onBackspace = {
-                    amountText = amountText.dropLast(1)
-                    amountError = false
-                },
-                onClear = {
-                    amountText = ""
-                    amountError = false
-                },
-                onDone = {
-                    amountError = parseMoneyToCents(amountText) == null
-                    dateError = runCatching { LocalDate.parse(date) }.isFailure
-                    accountsError = type == TransactionType.TRANSFER &&
-                        (fromAccountId == null || toAccountId == null || fromAccountId == toAccountId)
-                    if (!amountError && !dateError && !accountsError) {
-                        if (type == TransactionType.TRANSFER) {
-                            onSaveTransfer(transactionId, amountText, fromAccountId, toAccountId, date, note)
-                        } else {
-                            onSave(transactionId, amountText, type, categoryId, accountId, date, note)
-                        }
+                    if (amountText.isNotEmpty()) {
+                        amountText = amountText.dropLast(1)
+                    } else if (pendingOperand != null) {
+                        amountText = pendingOperand.orEmpty()
+                        pendingOperand = null
+                        pendingOperator = null
                     }
-                }
+                    amountError = false
+                },
+                onSaveAndContinue = { submit(keepEditing = true) },
+                onDone = { submit(keepEditing = false) }
             )
+            }
         }
     }
 }
@@ -270,48 +374,62 @@ private fun EntryHeader(
     onBack: () -> Unit,
     onNaturalEntry: () -> Unit
 ) {
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .height(58.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .size(42.dp)
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "返回",
+                tint = EntryMutedColor
+            )
         }
         Surface(
-            modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+            modifier = Modifier
+                .align(Alignment.Center)
+                .width(232.dp),
+            shape = RoundedCornerShape(50),
+            color = Color(0xFFF5F5F7),
+            border = BorderStroke(1.dp, Color.White)
         ) {
-            Row(modifier = Modifier.padding(4.dp)) {
+            Row(modifier = Modifier.padding(3.dp)) {
                 entryTypes.filter { allowTransfer || it.first != TransactionType.TRANSFER }.forEach { (type, label) ->
                     val selected = selectedType == type
                     Surface(
                         onClick = { onTypeSelected(type) },
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(20.dp),
-                        color = if (selected) MaterialTheme.colorScheme.surface else Color.Transparent,
-                        shadowElevation = if (selected) 2.dp else 0.dp
+                        shape = RoundedCornerShape(50),
+                        color = if (selected) Color.White else Color.Transparent,
+                        border = if (selected) BorderStroke(1.dp, Color.White) else null,
+                        shadowElevation = if (selected) 1.dp else 0.dp
                     ) {
                         Text(
                             text = label,
-                            modifier = Modifier.padding(vertical = 9.dp),
+                            modifier = Modifier.padding(vertical = 6.dp),
                             textAlign = TextAlign.Center,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                            color = if (selected) Color(0xFF252529) else EntryMutedColor
                         )
                     }
                 }
             }
         }
-        if (selectedType == TransactionType.TRANSFER) {
-            Spacer(modifier = Modifier.size(48.dp))
-        } else {
-            IconButton(onClick = onNaturalEntry, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = "一句话记账", tint = MaterialTheme.colorScheme.primary)
-            }
+        IconButton(
+            onClick = onNaturalEntry,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .size(42.dp)
+        ) {
+            Icon(Icons.Default.AutoAwesome, contentDescription = "一句话记账", tint = EntryMutedColor)
         }
     }
 }
@@ -323,45 +441,59 @@ private fun CategoryArea(
     onCategorySelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
-        Text(
-            "选择分类",
-            modifier = Modifier.padding(start = 4.dp, top = 6.dp),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+    Column(modifier = modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp)) {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(4),
+            columns = GridCells.Fixed(5),
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            contentPadding = PaddingValues(vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             items(categories, key = { it.id }) { category ->
-                val selected = category.id == selectedCategoryId
-                Surface(
-                    onClick = { onCategorySelected(category.id) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(82.dp),
-                    shape = RoundedCornerShape(18.dp),
-                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                    border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)) else null
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(category.icon, style = MaterialTheme.typography.headlineSmall)
-                        Text(
-                            category.name,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                EntryCategoryTile(
+                    category = category,
+                    selected = category.id == selectedCategoryId,
+                    onClick = { onCategorySelected(category.id) }
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun EntryCategoryTile(category: CategoryEntity, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(66.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f) else Color.Transparent,
+        border = if (selected) {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+        } else {
+            null
+        }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically)
+        ) {
+            CategoryIcon(
+                categoryId = category.id,
+                categoryName = category.name,
+                modifier = Modifier.size(25.dp),
+                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                category.name,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -379,8 +511,8 @@ private fun TransferAccountArea(
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 22.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text("选择转账账户", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(
@@ -422,18 +554,18 @@ private fun TransferAccountPicker(
         Surface(
             onClick = { expanded = true },
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
+            shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
                         selected?.let { "${it.icon} ${it.name} · ${formatMoney(it.balanceInCents)}" } ?: "请选择账户",
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -458,19 +590,21 @@ private fun TransferAccountPicker(
 private fun EntryMetadataRow(
     accounts: List<AccountEntity>,
     selectedAccountId: String?,
-    type: TransactionType,
-    date: String,
-    note: String,
     onAccountSelected: (String?) -> Unit,
+    showAccount: Boolean,
     onEditDate: () -> Unit,
-    onEditNote: () -> Unit
+    onEditNote: () -> Unit,
+    onNaturalEntry: () -> Unit
 ) {
     LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp),
+        contentPadding = PaddingValues(horizontal = 18.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        if (type != TransactionType.TRANSFER) {
+        if (showAccount) {
             item {
                 AccountMetadataChip(
                     accounts = accounts,
@@ -480,13 +614,13 @@ private fun EntryMetadataRow(
             }
         }
         item {
-            MetadataChip(text = "📅 ${formatDate(date)}", onClick = onEditDate)
+            EntryToolItem("日期", Icons.Default.CalendarMonth, onClick = onEditDate)
         }
         item {
-            MetadataChip(
-                text = if (note.isBlank()) "📝 添加备注" else "📝 ${note.take(10)}${if (note.length > 10) "…" else ""}",
-                onClick = onEditNote
-            )
+            EntryToolItem("备注", Icons.Default.EditNote, onClick = onEditNote)
+        }
+        item {
+            EntryToolItem("智能", Icons.Default.AutoAwesome, onClick = onNaturalEntry)
         }
     }
 }
@@ -500,11 +634,33 @@ private fun AccountMetadataChip(
     var expanded by remember { mutableStateOf(false) }
     val selected = accounts.firstOrNull { it.id == selectedAccountId }
     Box {
-        MetadataChip(
-            text = selected?.let { "${it.icon} ${it.name}" } ?: "💳 未指定账户",
+        Surface(
             onClick = { expanded = true },
-            trailingArrow = true
-        )
+            shape = RoundedCornerShape(50),
+            color = EntryAccountColor,
+            contentColor = EntryAccountContentColor
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(selected?.icon ?: "💳", fontSize = 16.sp)
+                Text(
+                    selected?.name ?: "选择账户",
+                    modifier = Modifier.padding(start = 5.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Icon(
+                    Icons.Default.KeyboardArrowDown,
+                    contentDescription = "选择账户",
+                    modifier = Modifier
+                        .padding(start = 2.dp)
+                        .size(18.dp)
+                )
+            }
+        }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
                 text = { Text("未指定账户") },
@@ -527,66 +683,95 @@ private fun AccountMetadataChip(
 }
 
 @Composable
-private fun MetadataChip(text: String, onClick: () -> Unit, trailingArrow: Boolean = false) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+private fun EntryToolItem(label: String, icon: ImageVector, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text, style = MaterialTheme.typography.labelMedium)
-            if (trailingArrow) {
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(16.dp))
-            }
-        }
+        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = EntryMutedColor)
+        Text(
+            label,
+            modifier = Modifier.padding(start = 5.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = EntryMutedColor
+        )
     }
 }
 
 @Composable
 private fun AmountDisplay(
     amountText: String,
-    type: TransactionType,
     color: Color,
+    date: String,
+    timeLabel: String,
+    note: String,
+    onEditDate: () -> Unit,
+    onEditNote: () -> Unit,
     amountError: Boolean,
     dateError: Boolean,
     accountsError: Boolean
 ) {
+    val dateLabel = if (date == LocalDate.now().toString()) timeLabel else formatDate(date)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            when (type) {
-                TransactionType.EXPENSE -> "支出金额"
-                TransactionType.INCOME -> "收入金额"
-                TransactionType.TRANSFER -> "转账金额"
-            },
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
             text = "¥${amountText.ifBlank { "0" }}",
-            style = MaterialTheme.typography.displaySmall,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.displayMedium,
+            fontWeight = FontWeight.Medium,
             color = color,
             maxLines = 1
         )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier
+                    .clickable(onClick = onEditDate)
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Schedule, contentDescription = "编辑日期", modifier = Modifier.size(17.dp), tint = EntryMutedColor)
+                Text(
+                    dateLabel,
+                    modifier = Modifier.padding(start = 6.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = EntryMutedColor
+                )
+            }
+            Text(
+                note.ifBlank { "点击填写备注" },
+                modifier = Modifier
+                    .padding(start = 28.dp)
+                    .clickable(onClick = onEditNote)
+                    .padding(vertical = 2.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = EntryMutedColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
         val error = when {
             amountError -> "请输入大于 0 的金额"
             dateError -> "日期格式应为 2026-09-12"
             accountsError -> "请选择两个不同的账户"
             else -> null
         }
-        Text(
-            text = error ?: " ",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.error
-        )
+        if (error != null) {
+            Text(
+                text = error,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -595,28 +780,28 @@ private fun AmountKeypad(
     type: TransactionType,
     isEditing: Boolean,
     onToken: (String) -> Unit,
+    onOperation: (String) -> Unit,
     onBackspace: () -> Unit,
-    onClear: () -> Unit,
+    onSaveAndContinue: () -> Unit,
     onDone: () -> Unit
 ) {
-    val rows = listOf(
+    val numberRows = listOf(
         listOf("1", "2", "3"),
         listOf("4", "5", "6"),
-        listOf("7", "8", "9"),
-        listOf(".", "0", "00")
+        listOf("7", "8", "9")
     )
-    val doneColor = if (type == TransactionType.EXPENSE) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-    val doneContentColor = if (type == TransactionType.EXPENSE) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
+    val doneColor = if (type == TransactionType.EXPENSE) EntryExpenseColor else MaterialTheme.colorScheme.primary
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(268.dp)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.44f))
-            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .height(252.dp)
+            .background(EntrySheetColor)
+            .padding(horizontal = 12.dp, vertical = 4.dp)
     ) {
-        Column(modifier = Modifier.weight(3f).fillMaxHeight()) {
-            rows.forEach { row ->
+        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+            numberRows.forEach { row ->
                 Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     row.forEach { token ->
                         KeypadTextButton(
@@ -627,34 +812,42 @@ private fun AmountKeypad(
                     }
                 }
             }
-        }
-        Spacer(modifier = Modifier.width(4.dp))
-        Column(modifier = Modifier.width(104.dp).fillMaxHeight()) {
-            KeypadIconButton(onClick = onBackspace, modifier = Modifier.weight(1f))
-            KeypadTextButton(
-                text = "清零",
-                onClick = onClear,
-                modifier = Modifier.weight(1f),
-                textStyle = MaterialTheme.typography.labelLarge
-            )
-            Surface(
-                onClick = onDone,
-                modifier = Modifier
-                    .weight(2f)
-                    .fillMaxWidth()
-                    .padding(4.dp),
-                shape = RoundedCornerShape(20.dp),
-                color = doneColor,
-                contentColor = doneContentColor
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        if (isEditing) "保存" else "完成",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                KeypadTextButton(text = ".", onClick = { onToken(".") }, modifier = Modifier.weight(1f))
+                KeypadTextButton(text = "0", onClick = { onToken("0") }, modifier = Modifier.weight(1f))
+                KeypadIconButton(onClick = onBackspace, modifier = Modifier.weight(1f))
             }
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Column(modifier = Modifier.width(94.dp).fillMaxHeight()) {
+            KeypadDualOperationButton(
+                primary = "+",
+                secondary = "×",
+                onPrimary = { onOperation("+") },
+                onSecondary = { onOperation("×") },
+                modifier = Modifier.weight(1f)
+            )
+            KeypadDualOperationButton(
+                primary = "−",
+                secondary = "÷",
+                onPrimary = { onOperation("-") },
+                onSecondary = { onOperation("÷") },
+                modifier = Modifier.weight(1f)
+            )
+            KeypadActionButton(
+                text = if (isEditing) "保存" else "保存再记",
+                onClick = if (isEditing) onDone else onSaveAndContinue,
+                modifier = Modifier.weight(1f),
+                color = EntryActionColor,
+                contentColor = Color(0xFF2D2D33)
+            )
+            KeypadActionButton(
+                text = "完成",
+                onClick = onDone,
+                modifier = Modifier.weight(1f),
+                color = doneColor,
+                contentColor = Color.White
+            )
         }
     }
 }
@@ -670,12 +863,11 @@ private fun KeypadTextButton(
         onClick = onClick,
         modifier = modifier
             .fillMaxSize()
-            .padding(4.dp),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+            .padding(1.dp),
+        color = Color.Transparent
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(text, style = textStyle, fontWeight = FontWeight.SemiBold)
+            Text(text, style = textStyle, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -685,15 +877,95 @@ private fun KeypadIconButton(onClick: () -> Unit, modifier: Modifier = Modifier)
     Surface(
         onClick = onClick,
         modifier = modifier
-            .fillMaxWidth()
-            .padding(4.dp),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+            .fillMaxSize()
+            .padding(1.dp),
+        color = Color.Transparent
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(Icons.AutoMirrored.Filled.Backspace, contentDescription = "删除一位")
         }
     }
+}
+
+@Composable
+private fun KeypadDualOperationButton(
+    primary: String,
+    secondary: String,
+    onPrimary: () -> Unit,
+    onSecondary: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = EntryActionColor
+    ) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable(onClick = onPrimary),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(primary, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Medium)
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable(onClick = onSecondary),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(secondary, style = MaterialTheme.typography.titleMedium, color = EntryMutedColor)
+            }
+        }
+    }
+}
+
+@Composable
+private fun KeypadActionButton(
+    text: String,
+    onClick: () -> Unit,
+    color: Color,
+    contentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = color,
+        contentColor = contentColor
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+private fun calculateAmount(leftText: String, rightText: String, operator: String): String? {
+    val left = parseMoneyToCents(leftText) ?: return null
+    val right = parseMoneyToCents(rightText) ?: return null
+    if (operator == "÷" && right == 0L) return null
+    val result = when (operator) {
+        "+" -> left + right
+        "-" -> left - right
+        "×" -> BigDecimal.valueOf(left)
+            .multiply(BigDecimal.valueOf(right))
+            .divide(BigDecimal.valueOf(100L), 0, RoundingMode.HALF_UP)
+            .longValueExact()
+        "÷" -> BigDecimal.valueOf(left)
+            .multiply(BigDecimal.valueOf(100L))
+            .divide(BigDecimal.valueOf(right), 0, RoundingMode.HALF_UP)
+            .longValueExact()
+        else -> return null
+    }
+    return result.takeIf { it > 0L }?.let(::formatInputMoney)
 }
 
 @Composable

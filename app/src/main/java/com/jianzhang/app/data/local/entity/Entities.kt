@@ -67,7 +67,11 @@ data class AccountEntity(
     val isDemo: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,
-    val enabled: Boolean = true
+    val enabled: Boolean = true,
+    val currencyCode: String = "CNY",
+    val note: String = "",
+    val includeInNetWorth: Boolean = true,
+    val canUseForTransactions: Boolean = true
 )
 
 @Entity(tableName = "recurring_expenses")

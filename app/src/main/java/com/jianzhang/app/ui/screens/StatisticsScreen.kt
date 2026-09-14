@@ -71,6 +71,7 @@ import com.jianzhang.app.data.local.entity.TransactionEntity
 import com.jianzhang.app.data.local.entity.TransactionType
 import com.jianzhang.app.ui.FinanceUiState
 import com.jianzhang.app.ui.components.AppCard
+import com.jianzhang.app.ui.components.CategoryIcon
 import com.jianzhang.app.ui.components.CollapsingTitleHeader
 import com.jianzhang.app.util.formatMoney
 import com.jianzhang.app.util.formatInputMoney
@@ -149,7 +150,8 @@ internal data class StatisticsBucket(
 internal data class CategorySlice(
     val name: String,
     val icon: String,
-    val amount: Long
+    val amount: Long,
+    val categoryId: String? = null
 )
 
 internal data class AssetSnapshot(
@@ -732,8 +734,14 @@ private fun BudgetManagementCard(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        CategoryIcon(
+                            categoryId = category.id,
+                            categoryName = category.name,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Text(
-                            text = "${category.icon} ${category.name}",
+                            text = category.name,
                             modifier = Modifier.weight(1f),
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
@@ -999,14 +1007,13 @@ private fun CategoryDetailRow(
                 .clip(CircleShape)
                 .background(color)
         )
-        Text(
-            text = slice.icon,
+        CategoryIcon(
+            categoryId = slice.categoryId,
+            categoryName = slice.name,
             modifier = Modifier
                 .width(38.dp)
                 .padding(start = 8.dp),
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            maxLines = 1
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
             text = slice.name,
@@ -1164,14 +1171,13 @@ private fun RankingTransactionRow(
                 color = rankTextColor
             )
         }
-        Text(
-            text = category?.icon ?: "📦",
+        CategoryIcon(
+            categoryId = category?.id,
+            categoryName = category?.name,
             modifier = Modifier
                 .width(36.dp)
                 .padding(start = 6.dp),
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            maxLines = 1
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Column(
             modifier = Modifier
@@ -2007,8 +2013,9 @@ internal fun categorySlices(
                 .firstOrNull()
             CategorySlice(
                 name = category?.name ?: "其他",
-                icon = category?.icon ?: "📦",
-                amount = categoryTransactions.sumOf { it.amountInCents }
+                icon = category?.icon ?: "other",
+                amount = categoryTransactions.sumOf { it.amountInCents },
+                categoryId = category?.id
             )
         }
         .sortedByDescending { it.amount }
@@ -2024,16 +2031,17 @@ internal fun topCategorySlices(slices: List<CategorySlice>, limit: Int): List<Ca
         .filter { it.name == "其他" }
         .sumOf { it.amount } + namedSlices.drop(visibleNamed.size).sumOf { it.amount }
     return if (otherAmount > 0L) {
-        visibleNamed + CategorySlice("其他", "📦", otherAmount)
+        visibleNamed + CategorySlice("其他", "other", otherAmount)
     } else {
         visibleNamed
     }
 }
 
 internal fun assetSnapshot(accounts: List<AccountEntity>): AssetSnapshot {
+    val includedAccounts = accounts.filter { it.includeInNetWorth }
     return AssetSnapshot(
-        totalAssets = accounts.sumOf { it.balanceInCents.coerceAtLeast(0L) },
-        totalLiabilities = accounts.sumOf { (-it.balanceInCents).coerceAtLeast(0L) }
+        totalAssets = includedAccounts.sumOf { it.balanceInCents.coerceAtLeast(0L) },
+        totalLiabilities = includedAccounts.sumOf { (-it.balanceInCents).coerceAtLeast(0L) }
     )
 }
 
@@ -2070,7 +2078,12 @@ internal fun assetTrendPoints(
     val windows = chartWindows(period, range)
     if (windows.isEmpty()) return emptyList()
 
-    val runningBalances = accounts.associate { it.id to it.balanceInCents }.toMutableMap()
+    // Excluded accounts are omitted from the running map so their historical
+    // transactions cannot leak back into the net-worth trend.
+    val runningBalances = accounts
+        .filter { it.includeInNetWorth }
+        .associate { it.id to it.balanceInCents }
+        .toMutableMap()
     datedTransactions
         .asSequence()
         .filter { it.date > range.end }

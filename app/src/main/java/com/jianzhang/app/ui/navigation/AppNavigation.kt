@@ -143,7 +143,7 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                 }
             }
             composable("add") {
-                ScreenWithInsets(scaffoldPadding = padding) {
+                ScreenWithInsets(scaffoldPadding = padding, topInset = false, bottomInset = false) {
                     AddTransactionScreen(
                         state = state,
                         transactionId = null,
@@ -155,6 +155,12 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                         onSaveTransfer = { id, amount, from, to, date, note ->
                             viewModel.saveTransfer(id, amount, from, to, date, note)
                             navController.popBackStack()
+                        },
+                        onSaveAndContinue = { id, amount, type, category, account, date, note ->
+                            viewModel.saveTransaction(id, amount, type, category, account, date, note)
+                        },
+                        onSaveTransferAndContinue = { id, amount, from, to, date, note ->
+                            viewModel.saveTransfer(id, amount, from, to, date, note)
                         }
                     )
                 }
@@ -163,7 +169,7 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                 route = "add/{transactionId}",
                 arguments = listOf(navArgument("transactionId") { type = NavType.StringType })
             ) { backStackEntry ->
-                ScreenWithInsets(scaffoldPadding = padding) {
+                ScreenWithInsets(scaffoldPadding = padding, topInset = false, bottomInset = false) {
                     AddTransactionScreen(
                         state = state,
                         transactionId = backStackEntry.arguments?.getString("transactionId"),
@@ -175,6 +181,12 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                         onSaveTransfer = { id, amount, from, to, date, note ->
                             viewModel.saveTransfer(id, amount, from, to, date, note)
                             navController.popBackStack()
+                        },
+                        onSaveAndContinue = { id, amount, type, category, account, date, note ->
+                            viewModel.saveTransaction(id, amount, type, category, account, date, note)
+                        },
+                        onSaveTransferAndContinue = { id, amount, from, to, date, note ->
+                            viewModel.saveTransfer(id, amount, from, to, date, note)
                         }
                     )
                 }
