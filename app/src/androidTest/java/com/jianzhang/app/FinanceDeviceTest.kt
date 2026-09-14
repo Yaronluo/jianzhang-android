@@ -208,4 +208,28 @@ class FinanceDeviceTest {
         assertTrue(database.financeDao().observeTransactions().first().none { it.isDemo })
         database.close()
     }
+
+    @Test
+    fun budgetsCanBeReadAcrossMonthsAndZeroRemovesThem() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            AppDatabase::class.java
+        ).allowMainThreadQueries().build()
+        val repository = FinanceRepository(database)
+
+        repository.setMonthlyBudget("2026-08", 100_000L)
+        repository.setMonthlyBudget("2026-09", 200_000L)
+        assertEquals(2, repository.budgets.first().size)
+
+        repository.setMonthlyBudget("2026-08", 0L)
+        repository.setCategoryBudget("2026-09", DefaultData.FOOD, 50_000L)
+        assertEquals(2, repository.budgets.first().size)
+
+        repository.setCategoryBudget("2026-09", DefaultData.FOOD, 0L)
+        val remaining = repository.budgets.first()
+        assertEquals(1, remaining.size)
+        assertEquals("2026-09", remaining.single().month)
+        assertEquals(null, remaining.single().categoryId)
+        database.close()
+    }
 }

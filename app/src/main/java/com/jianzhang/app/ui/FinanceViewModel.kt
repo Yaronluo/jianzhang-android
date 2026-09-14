@@ -22,10 +22,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
@@ -41,7 +39,6 @@ data class FinanceUiState(
     val selectedMonth: String = YearMonth.now().toString()
 )
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class FinanceViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = FinanceRepository(AppDatabase.getInstance(application))
     private val preferences = application.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -53,21 +50,26 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     val onboardingVisible: StateFlow<Boolean> = _onboardingVisible
     val themeMode: StateFlow<String> = _themeMode
 
+    private val budgetState = combine(repository.budgets, selectedMonth) { budgets, month ->
+        budgets to month
+    }
+
     val uiState: StateFlow<FinanceUiState> = combine(
         repository.transactions,
         repository.accounts,
         repository.categories,
         repository.recurringExpenses,
-        selectedMonth.flatMapLatest(repository::observeBudgets)
-    ) { transactions, accounts, categories, recurringExpenses, budgets ->
+        budgetState
+    ) { transactions, accounts, categories, recurringExpenses, (budgets, month) ->
+        val selectedBudgets = budgets.filter { it.month == month }
         FinanceUiState(
             transactions = transactions,
             accounts = accounts,
             categories = categories,
             recurringExpenses = recurringExpenses,
             budgets = budgets,
-            monthlyBudget = budgets.firstOrNull { it.categoryId == null },
-            selectedMonth = selectedMonth.value
+            monthlyBudget = selectedBudgets.firstOrNull { it.categoryId == null },
+            selectedMonth = month
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FinanceUiState())
 
@@ -267,26 +269,26 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun setMonthlyBudget(amountText: String) {
-        val amount = if (amountText.isBlank()) 0L else parseMoneyToCents(amountText)
+    fun setMonthlyBudget(month: String, amountText: String) {
+        val amount = if (amountText.isBlank()) 0L else parseMoneyToCentsOrZero(amountText)
         if (amount == null) {
             _events.tryEmit("请输入正确的预算金额")
             return
         }
         viewModelScope.launch {
-            runCatching { repository.setMonthlyBudget(selectedMonth.value, amount) }
+            runCatching { repository.setMonthlyBudget(month, amount) }
                 .onFailure { _events.emit(it.message ?: "预算保存失败") }
         }
     }
 
-    fun setCategoryBudget(categoryId: String, amountText: String) {
+    fun setCategoryBudget(month: String, categoryId: String, amountText: String) {
         val amount = if (amountText.isBlank()) 0L else parseMoneyToCentsOrZero(amountText)
         if (amount == null) {
             _events.tryEmit("请输入正确的分类预算")
             return
         }
         viewModelScope.launch {
-            runCatching { repository.setCategoryBudget(selectedMonth.value, categoryId, amount) }
+            runCatching { repository.setCategoryBudget(month, categoryId, amount) }
                 .onFailure { _events.emit(it.message ?: "分类预算保存失败") }
         }
     }

@@ -94,13 +94,10 @@ interface FinanceDao {
     suspend fun findRecurringTransaction(recurringId: String, date: String): TransactionEntity?
 
     @Query("SELECT * FROM budgets WHERE month = :month AND categoryId IS NULL LIMIT 1")
-    fun observeMonthlyBudget(month: String): Flow<BudgetEntity?>
-
-    @Query("SELECT * FROM budgets WHERE month = :month AND categoryId IS NULL LIMIT 1")
     suspend fun getMonthlyBudget(month: String): BudgetEntity?
 
-    @Query("SELECT * FROM budgets WHERE month = :month ORDER BY id ASC")
-    fun observeBudgets(month: String): Flow<List<BudgetEntity>>
+    @Query("SELECT * FROM budgets ORDER BY month DESC, id ASC")
+    fun observeAllBudgets(): Flow<List<BudgetEntity>>
 
     @Query("SELECT * FROM budgets WHERE month = :month AND categoryId = :categoryId LIMIT 1")
     suspend fun getCategoryBudget(month: String, categoryId: String): BudgetEntity?

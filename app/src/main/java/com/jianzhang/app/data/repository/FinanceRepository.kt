@@ -24,10 +24,7 @@ class FinanceRepository(private val database: AppDatabase) {
     val accounts: Flow<List<AccountEntity>> = dao.observeAccounts()
     val categories = dao.observeCategories()
     val recurringExpenses: Flow<List<RecurringExpenseEntity>> = dao.observeRecurringExpenses()
-
-    fun observeMonthlyBudget(month: String): Flow<BudgetEntity?> = dao.observeMonthlyBudget(month)
-
-    fun observeBudgets(month: String): Flow<List<BudgetEntity>> = dao.observeBudgets(month)
+    val budgets: Flow<List<BudgetEntity>> = dao.observeAllBudgets()
 
     suspend fun ensureDefaults() {
         dao.insertCategories(DefaultData.categories)
@@ -241,7 +238,9 @@ class FinanceRepository(private val database: AppDatabase) {
     suspend fun setMonthlyBudget(month: String, amountInCents: Long) {
         require(amountInCents >= 0) { "预算不能为负数" }
         val old = dao.getMonthlyBudget(month)
-        if (old == null) {
+        if (amountInCents == 0L) {
+            old?.let { dao.deleteBudget(it.id) }
+        } else if (old == null) {
             dao.insertBudget(BudgetEntity(month = month, amountInCents = amountInCents))
         } else {
             dao.updateBudget(old.copy(amountInCents = amountInCents, isDemo = false))

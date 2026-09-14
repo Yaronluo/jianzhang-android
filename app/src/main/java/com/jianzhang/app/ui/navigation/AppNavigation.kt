@@ -209,13 +209,18 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                 }
             }
             composable("statistics") {
-                ScreenWithInsets(scaffoldPadding = padding, bottomInset = false) {
+                ScreenWithInsets(scaffoldPadding = padding, topInset = false, bottomInset = false) {
                     StatisticsScreen(
                         state = state,
-                        onMonthPrevious = viewModel::previousMonth,
-                        onMonthNext = viewModel::nextMonth,
                         onSetBudget = viewModel::setMonthlyBudget,
-                        onSetCategoryBudget = viewModel::setCategoryBudget
+                        onSetCategoryBudget = viewModel::setCategoryBudget,
+                        onEditTransaction = { transaction ->
+                            if (transaction.type == com.jianzhang.app.data.local.entity.TransactionType.TRANSFER) {
+                                navController.navigate("transfer/${transaction.id}")
+                            } else {
+                                navController.navigate("add/${transaction.id}")
+                            }
+                        }
                     )
                 }
             }
