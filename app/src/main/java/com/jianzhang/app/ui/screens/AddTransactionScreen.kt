@@ -1,5 +1,6 @@
 package com.jianzhang.app.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -37,8 +38,6 @@ import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -55,6 +54,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -70,6 +70,9 @@ import com.jianzhang.app.domain.parser.NaturalLanguageParser
 import com.jianzhang.app.domain.parser.ParsedTransaction
 import com.jianzhang.app.ui.FinanceUiState
 import com.jianzhang.app.ui.components.CategoryIcon
+import com.jianzhang.app.ui.components.AppDropdownField
+import com.jianzhang.app.ui.components.AppDropdownItem
+import com.jianzhang.app.ui.components.AppDropdownMenu
 import com.jianzhang.app.util.formatDate
 import com.jianzhang.app.util.formatInputMoney
 import com.jianzhang.app.util.formatMoney
@@ -548,40 +551,24 @@ private fun TransferAccountPicker(
     excludedId: String?,
     onSelected: (String) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val selected = accounts.firstOrNull { it.id == selectedId }
-    Box {
-        Surface(
-            onClick = { expanded = true },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        selected?.let { "${it.icon} ${it.name} · ${formatMoney(it.balanceInCents)}" } ?: "请选择账户",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
+    AppDropdownField(
+        label = label,
+        value = selected?.let { "${it.icon} ${it.name}" } ?: "",
+        placeholder = "请选择账户",
+        modifier = Modifier.fillMaxWidth(),
+        supportingText = selected?.let { formatMoney(it.balanceInCents) }
+    ) { dismiss ->
+        accounts.filter { it.id != excludedId }.forEach { account ->
+            AppDropdownItem(
+                text = "${account.icon} ${account.name}",
+                supportingText = formatMoney(account.balanceInCents),
+                selected = account.id == selectedId,
+                onClick = {
+                    onSelected(account.id)
+                    dismiss()
                 }
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
-            }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            accounts.filter { it.id != excludedId }.forEach { account ->
-                DropdownMenuItem(
-                    text = { Text("${account.icon} ${account.name} · ${formatMoney(account.balanceInCents)}") },
-                    onClick = {
-                        onSelected(account.id)
-                        expanded = false
-                    }
-                )
-            }
+            )
         }
     }
 }
@@ -631,55 +618,64 @@ private fun AccountMetadataChip(
     selectedAccountId: String?,
     onSelected: (String?) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val selected = accounts.firstOrNull { it.id == selectedAccountId }
-    Box {
-        Surface(
-            onClick = { expanded = true },
-            shape = RoundedCornerShape(50),
-            color = EntryAccountColor,
-            contentColor = EntryAccountContentColor
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically
+    AppDropdownMenu(
+        minMenuWidth = 220.dp,
+        anchor = { onClick, expanded ->
+            val arrowRotation by animateFloatAsState(
+                targetValue = if (expanded) 180f else 0f,
+                label = "account-chip-arrow"
+            )
+            Surface(
+                onClick = onClick,
+                shape = RoundedCornerShape(50),
+                color = EntryAccountColor,
+                contentColor = EntryAccountContentColor
             ) {
-                Text(selected?.icon ?: "💳", fontSize = 16.sp)
-                Text(
-                    selected?.name ?: "选择账户",
-                    modifier = Modifier.padding(start = 5.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Icon(
-                    Icons.Default.KeyboardArrowDown,
-                    contentDescription = "选择账户",
-                    modifier = Modifier
-                        .padding(start = 2.dp)
-                        .size(18.dp)
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(selected?.icon ?: "💳", fontSize = 16.sp)
+                    Text(
+                        selected?.name ?: "选择账户",
+                        modifier = Modifier.padding(start = 5.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = "选择账户",
+                        modifier = Modifier
+                            .padding(start = 2.dp)
+                            .size(18.dp)
+                            .rotate(arrowRotation)
+                    )
+                }
             }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text("未指定账户") },
+        },
+        menuContent = { dismiss ->
+            AppDropdownItem(
+                text = "未指定账户",
+                selected = selectedAccountId == null,
                 onClick = {
                     onSelected(null)
-                    expanded = false
+                    dismiss()
                 }
             )
             accounts.forEach { account ->
-                DropdownMenuItem(
-                    text = { Text("${account.icon} ${account.name}") },
+                AppDropdownItem(
+                    text = "${account.icon} ${account.name}",
+                    selected = account.id == selectedAccountId,
                     onClick = {
                         onSelected(account.id)
-                        expanded = false
+                        dismiss()
                     }
                 )
             }
         }
-    }
+    )
 }
 
 @Composable

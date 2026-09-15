@@ -24,20 +24,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material3.Button
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -69,6 +65,9 @@ import com.jianzhang.app.domain.ocr.LocalReceiptOcr
 import com.jianzhang.app.domain.parser.ParsedReceipt
 import com.jianzhang.app.domain.parser.ReceiptParser
 import com.jianzhang.app.ui.FinanceUiState
+import com.jianzhang.app.ui.components.AppDropdownField
+import com.jianzhang.app.ui.components.AppDropdownItem
+import com.jianzhang.app.ui.components.BackTitleBar
 import com.jianzhang.app.util.formatInputMoney
 import com.jianzhang.app.util.parseMoneyToCents
 import kotlinx.coroutines.launch
@@ -219,23 +218,39 @@ private fun ReceiptSourceChooser(
         modifier = Modifier
             .fillMaxSize()
             .padding(start = 22.dp, top = top + 8.dp, end = 22.dp, bottom = bottom + 18.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         ReceiptHeader(title = "简易记账", onBack = onBack)
-        Spacer(modifier = Modifier.height(8.dp))
-        Icon(
-            Icons.AutoMirrored.Filled.ReceiptLong,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.primary
-        )
-        Text("拍一张，少写几步", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text(
-            "拍摄购物小票，或导入发票、支付账单截图。识别后先核对，再保存到账本。",
-            style = MaterialTheme.typography.bodyLarge,
-            lineHeight = 28.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+        ) {
+            Row(
+                modifier = Modifier.padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.size(64.dp),
+                    shape = RoundedCornerShape(21.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(34.dp))
+                    }
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("拍一张，少写几步", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        "购物小票、发票和支付截图都能识别，确认后再入账。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
         BigReceiptButton(
             text = "拍照识别",
             icon = { Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(30.dp)) },
@@ -244,19 +259,40 @@ private fun ReceiptSourceChooser(
         BigReceiptButton(
             text = "从相册导入",
             icon = { Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(30.dp)) },
+            emphasized = false,
             onClick = onGallery
         )
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+        ) {
+            Text(
+                if (aiConfig != null) "✨ 当前使用 ${aiConfig.provider.displayName} 辅助识别" else "✓ 当前使用本地识别",
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.secondary
+            )
+        }
         Spacer(modifier = Modifier.weight(1f))
         Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
         ) {
             Row(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(18.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.Top
             ) {
-                Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Surface(
+                    modifier = Modifier.size(38.dp),
+                    shape = RoundedCornerShape(13.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         if (aiConfig != null) "自定义 AI 已启用" else "本地隐私",
@@ -493,30 +529,32 @@ private fun ReceiptConfirmation(
 
 @Composable
 private fun ReceiptHeader(title: String, onBack: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().height(56.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", modifier = Modifier.size(28.dp))
-        }
-        Text(title, modifier = Modifier.padding(start = 8.dp), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-    }
+    BackTitleBar(title = title, onBack = onBack)
 }
 
 @Composable
 private fun BigReceiptButton(
     text: String,
     icon: (@Composable () -> Unit)? = null,
+    emphasized: Boolean = true,
     onClick: () -> Unit
 ) {
-    Button(
+    Surface(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(72.dp),
-        shape = RoundedCornerShape(22.dp)
+        modifier = Modifier.fillMaxWidth().height(66.dp),
+        shape = RoundedCornerShape(21.dp),
+        color = if (emphasized) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        contentColor = if (emphasized) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        border = if (emphasized) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        icon?.invoke()
-        Text(text, modifier = Modifier.padding(start = if (icon == null) 0.dp else 12.dp), fontSize = 21.sp, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            icon?.invoke()
+            Text(text, modifier = Modifier.padding(start = if (icon == null) 0.dp else 12.dp), fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
@@ -528,35 +566,21 @@ private fun <T> ReceiptSelector(
     itemText: (T) -> String,
     onSelected: (T) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        Surface(
-            onClick = { expanded = true },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(selectedText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    AppDropdownField(
+        label = label,
+        value = selectedText,
+        modifier = Modifier.fillMaxWidth(),
+        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+    ) { dismiss ->
+        items.forEach { item ->
+            AppDropdownItem(
+                text = itemText(item),
+                selected = itemText(item) == selectedText,
+                onClick = {
+                    onSelected(item)
+                    dismiss()
                 }
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "选择$label")
-            }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            items.forEach { item ->
-                DropdownMenuItem(
-                    text = { Text(itemText(item), fontSize = 17.sp) },
-                    onClick = {
-                        onSelected(item)
-                        expanded = false
-                    }
-                )
-            }
+            )
         }
     }
 }
@@ -568,54 +592,34 @@ private fun ReceiptAccountSelector(
     recognizedPaymentMethod: String,
     onSelected: (String?) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val selected = accounts.firstOrNull { it.id == selectedId }
-    Box {
-        Surface(
-            onClick = { expanded = true },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("账户", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        selected?.let { "${it.icon} ${it.name}" } ?: "不关联账户",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    if (recognizedPaymentMethod.isNotBlank()) {
-                        Text(
-                            "识别到付款方式：$recognizedPaymentMethod",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "选择账户")
+    AppDropdownField(
+        label = "账户",
+        value = selected?.let { "${it.icon} ${it.name}" } ?: "",
+        placeholder = "不关联账户",
+        supportingText = recognizedPaymentMethod
+            .takeIf { it.isNotBlank() }
+            ?.let { "识别到付款方式：$it" },
+        modifier = Modifier.fillMaxWidth(),
+        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+    ) { dismiss ->
+        AppDropdownItem(
+            text = "不关联账户",
+            selected = selectedId == null,
+            onClick = {
+                onSelected(null)
+                dismiss()
             }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text("不关联账户", fontSize = 17.sp) },
+        )
+        accounts.forEach { account ->
+            AppDropdownItem(
+                text = "${account.icon} ${account.name}",
+                selected = account.id == selectedId,
                 onClick = {
-                    onSelected(null)
-                    expanded = false
+                    onSelected(account.id)
+                    dismiss()
                 }
             )
-            accounts.forEach { account ->
-                DropdownMenuItem(
-                    text = { Text("${account.icon} ${account.name}", fontSize = 17.sp) },
-                    onClick = {
-                        onSelected(account.id)
-                        expanded = false
-                    }
-                )
-            }
         }
     }
 }

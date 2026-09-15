@@ -2,25 +2,38 @@ package com.jianzhang.app.ui.screens
 
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,8 +42,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jianzhang.app.domain.ai.AiReceiptSettings
 import com.jianzhang.app.ui.components.AppCard
@@ -75,92 +91,131 @@ fun SettingsScreen(
         BackTitleBar(title = "设置", onBack = onBack)
         LazyColumn(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             item {
-                AppCard {
-                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("简账·慧录", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text("本地识别或自定义 AI，核对后记账。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                AppCard(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(54.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(28.dp))
+                            }
+                        }
+                        Column(
+                            modifier = Modifier.padding(start = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text("简账·慧录", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text(
+                                "让每一笔收支，都清楚又安心",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
             item {
-                Text("数据与账户", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 4.dp))
-                AppCard(modifier = Modifier.padding(top = 8.dp)) {
+                SettingsSectionTitle("数据与账户")
+                AppCard(modifier = Modifier.padding(top = 10.dp)) {
                     Column {
-                        ListItem(
-                            headlineContent = { Text("账户管理") },
-                            supportingContent = { Text("创建、停用现金和各类支付账户") },
-                            leadingContent = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = null) },
-                            modifier = Modifier.fillMaxWidth(),
-                            trailingContent = { TextButton(onClick = onOpenAssets) { Text("查看") } }
+                        SettingsActionRow(
+                            icon = Icons.Default.AccountBalanceWallet,
+                            title = "账户管理",
+                            subtitle = "管理现金、银行卡与支付账户",
+                            actionLabel = "查看",
+                            onClick = onOpenAssets
                         )
-                        ListItem(
-                            headlineContent = { Text("导出账单") },
-                            supportingContent = { Text("生成 CSV 文本，可分享到文件或表格应用") },
-                            leadingContent = { Text("↗️") },
-                            modifier = Modifier.fillMaxWidth(),
-                            trailingContent = {
-                                TextButton(onClick = {
-                                    val intent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/csv"
-                                        putExtra(Intent.EXTRA_SUBJECT, "简账数据导出")
-                                        putExtra(Intent.EXTRA_TEXT, exportText())
-                                    }
-                                    context.startActivity(Intent.createChooser(intent, "导出简账数据"))
-                                }) { Text("导出") }
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 18.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
+                        SettingsActionRow(
+                            icon = Icons.Default.FileUpload,
+                            title = "导出账单",
+                            subtitle = "生成 CSV，可分享至文件或表格应用",
+                            actionLabel = "导出",
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/csv"
+                                    putExtra(Intent.EXTRA_SUBJECT, "简账数据导出")
+                                    putExtra(Intent.EXTRA_TEXT, exportText())
+                                }
+                                context.startActivity(Intent.createChooser(intent, "导出简账数据"))
                             }
                         )
                     }
                 }
             }
             item {
-                Text("AI 识票", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 4.dp))
-                AppCard(modifier = Modifier.padding(top = 8.dp)) {
-                    ListItem(
-                        headlineContent = { Text("AI 服务管理") },
-                        supportingContent = {
-                            val active = aiSettings.activeProfile
-                            Text(
-                                when {
-                                    !aiSettings.enabled -> "未启用 · 已保存 ${aiSettings.profiles.size} 个服务"
-                                    active == null -> "尚未选择服务"
-                                    !active.isConfigured -> "${active.name} 配置不完整"
-                                    else -> "正在使用 ${active.name} · 已保存 ${aiSettings.profiles.size} 个服务"
-                                }
-                            )
+                SettingsSectionTitle("AI 识票")
+                AppCard(modifier = Modifier.padding(top = 10.dp)) {
+                    val active = aiSettings.activeProfile
+                    SettingsActionRow(
+                        icon = Icons.Default.AutoAwesome,
+                        title = "AI 服务管理",
+                        subtitle = when {
+                            !aiSettings.enabled -> "未启用 · 已保存 ${aiSettings.profiles.size} 个服务"
+                            active == null -> "尚未选择服务"
+                            !active.isConfigured -> "${active.name} 配置不完整"
+                            else -> "正在使用 ${active.name}"
                         },
-                        leadingContent = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
-                        modifier = Modifier.fillMaxWidth(),
-                        trailingContent = { TextButton(onClick = onOpenAiSettings) { Text("管理") } }
+                        actionLabel = "管理",
+                        onClick = onOpenAiSettings
                     )
                 }
             }
             item {
-                Text("外观", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 4.dp))
-                AppCard(modifier = Modifier.padding(top = 8.dp)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("主题模式", fontWeight = FontWeight.SemiBold)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SettingsSectionTitle("外观")
+                AppCard(modifier = Modifier.padding(top = 10.dp)) {
+                    Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            SettingsIcon(Icons.Default.Palette)
+                            Column(modifier = Modifier.padding(start = 12.dp)) {
+                                Text("主题模式", fontWeight = FontWeight.SemiBold)
+                                Text("选择更适合你的显示方式", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEach { (mode, label) ->
-                                FilterChip(selected = themeMode == mode, onClick = { onSetThemeMode(mode) }, label = { Text(label) })
+                                val selected = themeMode == mode
+                                Surface(
+                                    onClick = { onSetThemeMode(mode) },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                ) {
+                                    Text(
+                                        label,
+                                        modifier = Modifier.padding(vertical = 11.dp),
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
             item {
-                Text("演示数据", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 4.dp))
-                AppCard(modifier = Modifier.padding(top = 8.dp)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("用于比赛现场快速展示账本、资产、图表和财务洞察。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Button(onClick = onGenerateDemo) {
+                SettingsSectionTitle("演示数据")
+                AppCard(modifier = Modifier.padding(top = 10.dp)) {
+                    Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Text("快速生成一套账本、资产与图表数据，方便现场展示。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Button(onClick = onGenerateDemo, modifier = Modifier.weight(1.35f).height(50.dp), shape = RoundedCornerShape(16.dp)) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = null)
                                 Text(" 生成演示数据")
                             }
-                            OutlinedButton(onClick = { showClearConfirm = true }) {
+                            OutlinedButton(onClick = { showClearConfirm = true }, modifier = Modifier.weight(0.75f).height(50.dp), shape = RoundedCornerShape(16.dp)) {
                                 Icon(Icons.Default.DeleteSweep, contentDescription = null)
                                 Text(" 清除")
                             }
@@ -169,17 +224,78 @@ fun SettingsScreen(
                 }
             }
             item {
-                Text("关于", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 4.dp))
-                AppCard(modifier = Modifier.padding(top = 8.dp)) {
-                    ListItem(
-                        headlineContent = { Text("关于简账·慧录") },
-                        supportingContent = { Text("版本 1.0 · 本地识别与自定义 AI") },
-                        leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
-                        modifier = Modifier.fillMaxWidth(),
-                        trailingContent = { TextButton(onClick = { showAbout = true }) { Text("查看") } }
+                SettingsSectionTitle("关于")
+                AppCard(modifier = Modifier.padding(top = 10.dp, bottom = 20.dp)) {
+                    SettingsActionRow(
+                        icon = Icons.Default.Info,
+                        title = "关于简账·慧录",
+                        subtitle = "版本 1.0 · 本地识别与自定义 AI",
+                        actionLabel = "查看",
+                        onClick = { showAbout = true }
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SettingsSectionTitle(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(horizontal = 4.dp)
+    )
+}
+
+@Composable
+private fun SettingsIcon(icon: ImageVector) {
+    Surface(
+        modifier = Modifier.size(42.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
+        }
+    }
+}
+
+@Composable
+private fun SettingsActionRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    actionLabel: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        SettingsIcon(icon)
+        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(actionLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+        Icon(
+            Icons.AutoMirrored.Filled.ArrowForwardIos,
+            contentDescription = null,
+            modifier = Modifier.padding(start = 5.dp).size(13.dp),
+            tint = MaterialTheme.colorScheme.secondary
+        )
     }
 }

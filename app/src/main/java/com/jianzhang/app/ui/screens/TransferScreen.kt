@@ -8,14 +8,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,8 +29,11 @@ import com.jianzhang.app.data.local.entity.AccountEntity
 import com.jianzhang.app.data.local.entity.TransactionType
 import com.jianzhang.app.ui.FinanceUiState
 import com.jianzhang.app.ui.components.AppCard
+import com.jianzhang.app.ui.components.AppDropdownField
+import com.jianzhang.app.ui.components.AppDropdownItem
 import com.jianzhang.app.ui.components.BackTitleBar
 import com.jianzhang.app.util.formatInputMoney
+import com.jianzhang.app.util.formatMoney
 import com.jianzhang.app.util.parseMoneyToCents
 import java.time.LocalDate
 
@@ -142,22 +141,24 @@ private fun AccountPicker(
     excludedId: String?,
     onSelected: (String) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val selected = accounts.firstOrNull { it.id == selectedId }
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        androidx.compose.foundation.layout.Box {
-            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(selected?.let { "${it.icon} ${it.name}" } ?: "请选择", modifier = Modifier.weight(1f))
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
-            }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                accounts.filter { it.id != excludedId }.forEach { account ->
-                    DropdownMenuItem(
-                        text = { Text("${account.icon} ${account.name}") },
-                        onClick = { onSelected(account.id); expanded = false }
-                    )
-                }
+        AppDropdownField(
+            label = label,
+            value = selected?.let { "${it.icon} ${it.name}" } ?: "",
+            placeholder = "请选择账户",
+            modifier = Modifier.fillMaxWidth()
+        ) { dismiss ->
+            accounts.filter { it.id != excludedId }.forEach { account ->
+                AppDropdownItem(
+                    text = "${account.icon} ${account.name}",
+                    supportingText = formatMoney(account.balanceInCents),
+                    selected = account.id == selectedId,
+                    onClick = {
+                        onSelected(account.id)
+                        dismiss()
+                    }
+                )
             }
         }
     }

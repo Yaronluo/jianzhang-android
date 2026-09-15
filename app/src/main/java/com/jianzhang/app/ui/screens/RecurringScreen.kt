@@ -1,5 +1,6 @@
 package com.jianzhang.app.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,12 +34,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -58,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -72,6 +71,8 @@ import com.jianzhang.app.data.local.entity.TransactionEntity
 import com.jianzhang.app.data.local.entity.TransactionType
 import com.jianzhang.app.ui.FinanceUiState
 import com.jianzhang.app.ui.components.AppCard
+import com.jianzhang.app.ui.components.AppDropdownItem
+import com.jianzhang.app.ui.components.AppDropdownMenu
 import com.jianzhang.app.ui.components.CategoryIcon
 import com.jianzhang.app.ui.components.CollapsingTitleHeader
 import com.jianzhang.app.ui.components.EmptyState
@@ -328,9 +329,6 @@ private fun RecurringDialog(
     var cycleName by rememberSaveable(existing?.id) { mutableStateOf(existing?.cycle?.name ?: RecurringCycle.MONTHLY.name) }
     var nextDate by rememberSaveable(existing?.id) { mutableStateOf(existing?.nextDate ?: LocalDate.now().toString()) }
     var note by rememberSaveable(existing?.id) { mutableStateOf(existing?.note ?: "") }
-    var categoryExpanded by remember { mutableStateOf(false) }
-    var cycleExpanded by remember { mutableStateOf(false) }
-    var accountExpanded by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     val expenseCategories = remember(state.categories) {
         state.categories
@@ -423,82 +421,103 @@ private fun RecurringDialog(
                         .padding(horizontal = 20.dp, vertical = 2.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Box {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = { categoryExpanded = true },
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.surface
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                    AppDropdownMenu(
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = expenseCategories.isNotEmpty(),
+                        anchor = { onClick, expanded ->
+                            val arrowRotation by animateFloatAsState(
+                                targetValue = if (expanded) 180f else 0f,
+                                label = "category-arrow"
+                            )
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = onClick,
+                                enabled = expenseCategories.isNotEmpty(),
+                                shape = RoundedCornerShape(20.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    if (category != null) {
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.32f)
+                                    } else {
+                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+                                    }
+                                )
                             ) {
-                                Surface(
-                                    modifier = Modifier.size(40.dp),
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        if (category == null) {
-                                            Icon(
-                                                imageVector = Icons.Outlined.MoreHoriz,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(22.dp),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                    Surface(
+                                        modifier = Modifier.size(40.dp),
+                                        shape = CircleShape,
+                                        color = if (category == null) {
+                                            MaterialTheme.colorScheme.surfaceVariant
                                         } else {
-                                            CategoryIcon(
-                                                categoryId = category.id,
-                                                categoryName = category.name,
-                                                modifier = Modifier.size(20.dp),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+                                        }
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            if (category == null) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.MoreHoriz,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(22.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            } else {
+                                                CategoryIcon(
+                                                    categoryId = category.id,
+                                                    categoryName = category.name,
+                                                    modifier = Modifier.size(20.dp),
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
                                         }
                                     }
+                                    Text(
+                                        category?.name ?: "选择分类",
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(start = 14.dp),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (category == null) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f) else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "选择分类",
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .rotate(arrowRotation),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
                                 }
-                                Text(
-                                    category?.name ?: "选择分类",
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(start = 14.dp),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = if (category == null) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f) else MaterialTheme.colorScheme.onSurface
-                                )
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    contentDescription = "选择分类",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
                             }
-                        }
-                        DropdownMenu(
-                            expanded = categoryExpanded && expenseCategories.isNotEmpty(),
-                            onDismissRequest = { categoryExpanded = false }
-                        ) {
+                        },
+                        menuContent = { dismiss ->
                             expenseCategories.forEach { item ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            CategoryIcon(
-                                                categoryId = item.id,
-                                                categoryName = item.name,
-                                                modifier = Modifier.size(20.dp),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            Text(item.name, modifier = Modifier.padding(start = 10.dp))
-                                        }
+                                AppDropdownItem(
+                                    text = item.name,
+                                    selected = item.id == categoryId,
+                                    leadingContent = {
+                                        CategoryIcon(
+                                            categoryId = item.id,
+                                            categoryName = item.name,
+                                            modifier = Modifier.size(20.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     },
                                     onClick = {
                                         categoryId = item.id
-                                        categoryExpanded = false
+                                        dismiss()
                                     }
                                 )
                             }
                         }
-                    }
+                    )
 
                     RecurringEditorSectionTitle("基本信息")
                     RecurringEditorCard {
@@ -520,33 +539,36 @@ private fun RecurringDialog(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
                         RecurringEditorValueRow(label = "币种", value = "CNY")
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-                        Box {
-                            RecurringEditorValueRow(
-                                label = "周期",
-                                value = if (cycle == RecurringCycle.MONTHLY) "每月" else "每年",
-                                onClick = { cycleExpanded = true },
-                                showTrailingIcon = true
-                            )
-                            DropdownMenu(
-                                expanded = cycleExpanded,
-                                onDismissRequest = { cycleExpanded = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("每月") },
+                        AppDropdownMenu(
+                            modifier = Modifier.fillMaxWidth(),
+                            anchor = { onClick, expanded ->
+                                RecurringEditorValueRow(
+                                    label = "周期",
+                                    value = if (cycle == RecurringCycle.MONTHLY) "每月" else "每年",
+                                    onClick = onClick,
+                                    showTrailingIcon = true,
+                                    expanded = expanded
+                                )
+                            },
+                            menuContent = { dismiss ->
+                                AppDropdownItem(
+                                    text = "每月",
+                                    selected = cycle == RecurringCycle.MONTHLY,
                                     onClick = {
                                         cycleName = RecurringCycle.MONTHLY.name
-                                        cycleExpanded = false
+                                        dismiss()
                                     }
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("每年") },
+                                AppDropdownItem(
+                                    text = "每年",
+                                    selected = cycle == RecurringCycle.YEARLY,
                                     onClick = {
                                         cycleName = RecurringCycle.YEARLY.name
-                                        cycleExpanded = false
+                                        dismiss()
                                     }
                                 )
                             }
-                        }
+                        )
                     }
 
                     RecurringEditorSectionTitle("日期")
@@ -563,29 +585,31 @@ private fun RecurringDialog(
                     RecurringEditorCard {
                         RecurringEditorSwitchRow(label = "自动续费", checked = existing?.enabled ?: true)
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-                        Box {
-                            RecurringEditorValueRow(
-                                label = "付款账户",
-                                value = account?.name ?: "未选择",
-                                valueColor = if (account == null) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                onClick = { accountExpanded = true },
-                                showTrailingIcon = true
-                            )
-                            DropdownMenu(
-                                expanded = accountExpanded,
-                                onDismissRequest = { accountExpanded = false }
-                            ) {
+                        AppDropdownMenu(
+                            modifier = Modifier.fillMaxWidth(),
+                            anchor = { onClick, expanded ->
+                                RecurringEditorValueRow(
+                                    label = "付款账户",
+                                    value = account?.name ?: "未选择",
+                                    valueColor = if (account == null) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    onClick = onClick,
+                                    showTrailingIcon = true,
+                                    expanded = expanded
+                                )
+                            },
+                            menuContent = { dismiss ->
                                 state.accounts.forEach { item ->
-                                    DropdownMenuItem(
-                                        text = { Text(item.name) },
+                                    AppDropdownItem(
+                                        text = "${item.icon} ${item.name}",
+                                        selected = item.id == accountId,
                                         onClick = {
                                             accountId = item.id
-                                            accountExpanded = false
+                                            dismiss()
                                         }
                                     )
                                 }
                             }
-                        }
+                        )
                     }
 
                     RecurringEditorSectionTitle("备注")
@@ -690,8 +714,13 @@ private fun RecurringEditorValueRow(
     value: String,
     valueColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     onClick: (() -> Unit)? = null,
-    showTrailingIcon: Boolean = false
+    showTrailingIcon: Boolean = false,
+    expanded: Boolean = false
 ) {
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        label = "recurring-value-arrow"
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -706,8 +735,10 @@ private fun RecurringEditorValueRow(
             Icon(
                 imageVector = Icons.Default.KeyboardArrowDown,
                 contentDescription = null,
-                modifier = Modifier.padding(start = 4.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .rotate(arrowRotation),
+                tint = MaterialTheme.colorScheme.primary
             )
         }
     }
