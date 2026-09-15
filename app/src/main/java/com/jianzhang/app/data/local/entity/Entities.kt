@@ -42,6 +42,10 @@ data class TransactionEntity(
     val note: String,
     val sourceRecurringExpenseId: String? = null,
     val isDemo: Boolean = false,
+    val merchant: String? = null,
+    val paymentMethod: String? = null,
+    val orderId: String? = null,
+    val importSource: String? = null,
     val createdAt: Long,
     val updatedAt: Long
 )

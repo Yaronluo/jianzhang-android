@@ -21,7 +21,7 @@ import com.jianzhang.app.data.local.entity.TransactionEntity
         RecurringExpenseEntity::class,
         BudgetEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -37,7 +37,7 @@ abstract class AppDatabase : RoomDatabase() {
                 context.applicationContext,
                 AppDatabase::class.java,
                 "jianzhang.db"
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
         }
 
         /** Adds transfer destination information without touching existing local financial data. */
@@ -54,6 +54,16 @@ abstract class AppDatabase : RoomDatabase() {
                 database.execSQL("ALTER TABLE accounts ADD COLUMN note TEXT NOT NULL DEFAULT ''")
                 database.execSQL("ALTER TABLE accounts ADD COLUMN includeInNetWorth INTEGER NOT NULL DEFAULT 1")
                 database.execSQL("ALTER TABLE accounts ADD COLUMN canUseForTransactions INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
+        /** Adds optional receipt metadata while preserving every existing transaction. */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE transactions ADD COLUMN merchant TEXT")
+                database.execSQL("ALTER TABLE transactions ADD COLUMN paymentMethod TEXT")
+                database.execSQL("ALTER TABLE transactions ADD COLUMN orderId TEXT")
+                database.execSQL("ALTER TABLE transactions ADD COLUMN importSource TEXT")
             }
         }
     }

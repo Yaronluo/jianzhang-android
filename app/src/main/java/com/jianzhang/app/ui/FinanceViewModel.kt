@@ -13,7 +13,9 @@ import com.jianzhang.app.data.local.entity.RecurringCycle
 import com.jianzhang.app.data.local.entity.RecurringExpenseEntity
 import com.jianzhang.app.data.local.entity.TransactionEntity
 import com.jianzhang.app.data.local.entity.TransactionType
+import com.jianzhang.app.data.preferences.AiConfigStore
 import com.jianzhang.app.data.repository.FinanceRepository
+import com.jianzhang.app.domain.ai.AiReceiptSettings
 import com.jianzhang.app.util.parseMoneyToCents
 import com.jianzhang.app.util.parseMoneyToCentsOrZero
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -42,13 +44,16 @@ data class FinanceUiState(
 class FinanceViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = FinanceRepository(AppDatabase.getInstance(application))
     private val preferences = application.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    private val aiConfigStore = AiConfigStore(application)
     private val selectedMonth = MutableStateFlow(YearMonth.now().toString())
     private val _events = MutableSharedFlow<String>(extraBufferCapacity = 8)
     private val _onboardingVisible = MutableStateFlow(!preferences.getBoolean(KEY_ONBOARDING_COMPLETED, false))
     private val _themeMode = MutableStateFlow(preferences.getString(KEY_THEME_MODE, THEME_SYSTEM) ?: THEME_SYSTEM)
+    private val _aiSettings = MutableStateFlow(aiConfigStore.load())
     val events = _events.asSharedFlow()
     val onboardingVisible: StateFlow<Boolean> = _onboardingVisible
     val themeMode: StateFlow<String> = _themeMode
+    val aiSettings: StateFlow<AiReceiptSettings> = _aiSettings
 
     private val budgetState = combine(repository.budgets, selectedMonth) { budgets, month ->
         budgets to month
@@ -89,6 +94,24 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         selectedMonth.value = YearMonth.parse(selectedMonth.value).plusMonths(1).toString()
     }
 
+    fun saveAiSettings(settings: AiReceiptSettings) {
+        runCatching {
+            aiConfigStore.save(settings)
+            _aiSettings.value = aiConfigStore.load()
+        }
+            .onSuccess { _events.tryEmit("AI 服务配置已保存") }
+            .onFailure { _events.tryEmit(it.message ?: "AI 配置保存失败") }
+    }
+
+    fun clearAiSettings() {
+        runCatching {
+            aiConfigStore.clear()
+            _aiSettings.value = AiReceiptSettings()
+        }
+            .onSuccess { _events.tryEmit("AI 配置已清除") }
+            .onFailure { _events.tryEmit(it.message ?: "AI 配置清除失败") }
+    }
+
     fun saveTransaction(
         transactionId: String?,
         amountText: String,
@@ -118,6 +141,47 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     note = note.trim()
                 )
             }.onFailure { _events.emit(it.message ?: "保存失败，请稍后再试") }
+        }
+    }
+
+    fun saveReceiptTransaction(
+        amountText: String,
+        categoryId: String,
+        accountId: String?,
+        date: String,
+        time: String,
+        merchant: String,
+        paymentMethod: String,
+        note: String
+    ) {
+        val amount = parseMoneyToCents(amountText)
+        if (amount == null) {
+            _events.tryEmit("请核对并填写正确金额")
+            return
+        }
+        if (runCatching { LocalDate.parse(date) }.isFailure || runCatching { LocalTime.parse(time) }.isFailure) {
+            _events.tryEmit("请核对日期和时间")
+            return
+        }
+        val savedNote = listOf(merchant.trim(), note.trim()).filter(String::isNotBlank).joinToString(" · ")
+        viewModelScope.launch {
+            runCatching {
+                repository.saveTransaction(
+                    transactionId = null,
+                    amountInCents = amount,
+                    type = TransactionType.EXPENSE,
+                    categoryId = categoryId,
+                    accountId = accountId,
+                    date = date,
+                    time = time,
+                    note = savedNote,
+                    merchant = merchant.trim().ifBlank { null },
+                    paymentMethod = paymentMethod.trim().ifBlank { null },
+                    importSource = "receipt"
+                )
+            }
+                .onSuccess { _events.emit("票据账单已保存") }
+                .onFailure { _events.emit(it.message ?: "票据账单保存失败") }
         }
     }
 

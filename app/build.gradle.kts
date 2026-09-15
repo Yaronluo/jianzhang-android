@@ -65,9 +65,13 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.foundation:foundation")
 
+    // Bundled Chinese OCR model: available immediately without a first-run download.
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:core:1.6.1")

@@ -56,9 +56,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.jianzhang.app.ui.FinanceViewModel
 import com.jianzhang.app.ui.screens.AddTransactionScreen
+import com.jianzhang.app.ui.screens.AiSettingsScreen
 import com.jianzhang.app.ui.screens.AssetsScreen
 import com.jianzhang.app.ui.screens.LedgerScreen
 import com.jianzhang.app.ui.screens.RecurringScreen
+import com.jianzhang.app.ui.screens.ReceiptEntryScreen
 import com.jianzhang.app.ui.screens.SettingsScreen
 import com.jianzhang.app.ui.screens.StatisticsScreen
 import com.jianzhang.app.ui.screens.TransferScreen
@@ -80,6 +82,7 @@ private val bottomDestinations = listOf(
 fun JianzhangApp(viewModel: FinanceViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    val aiSettings by viewModel.aiSettings.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     var recurringAddRequested by rememberSaveable { mutableStateOf(false) }
     var assetAddRequested by rememberSaveable { mutableStateOf(false) }
@@ -125,6 +128,7 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                             }
                         },
                         onDelete = viewModel::deleteTransaction,
+                        onOpenQuickEntry = { navController.navigate("receipt") },
                         onCreateAccount = viewModel::createRecommendedAccount,
                         onGenerateDemo = viewModel::generateDemoData
                     )
@@ -139,6 +143,28 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                         onSave = viewModel::saveRecurringExpense,
                         onConfirm = viewModel::confirmRecurringExpense,
                         onDelete = viewModel::deleteRecurringExpense
+                    )
+                }
+            }
+            composable("receipt") {
+                ScreenWithInsets(scaffoldPadding = padding, topInset = false, bottomInset = false) {
+                    ReceiptEntryScreen(
+                        state = state,
+                        aiSettings = aiSettings,
+                        onBack = { navController.popBackStack() },
+                        onSave = { amount, category, account, date, time, merchant, paymentMethod, note ->
+                            viewModel.saveReceiptTransaction(
+                                amount,
+                                category,
+                                account,
+                                date,
+                                time,
+                                merchant,
+                                paymentMethod,
+                                note
+                            )
+                            navController.popBackStack()
+                        }
                     )
                 }
             }
@@ -246,9 +272,21 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                             navController.popBackStack()
                             navController.navigate("assets")
                         },
+                        onOpenAiSettings = { navController.navigate("ai-settings") },
                         themeMode = themeMode,
                         onSetThemeMode = viewModel::setThemeMode,
+                        aiSettings = aiSettings,
                         exportText = viewModel::exportText
+                    )
+                }
+            }
+            composable("ai-settings") {
+                ScreenWithInsets(scaffoldPadding = padding) {
+                    AiSettingsScreen(
+                        settings = aiSettings,
+                        onBack = { navController.popBackStack() },
+                        onSaveSettings = viewModel::saveAiSettings,
+                        onClearSettings = viewModel::clearAiSettings
                     )
                 }
             }

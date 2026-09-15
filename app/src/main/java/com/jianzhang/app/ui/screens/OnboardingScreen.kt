@@ -41,7 +41,7 @@ fun OnboardingScreen(
             .padding(horizontal = 24.dp, vertical = 30.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Text("简账", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+        Text("简账·慧录", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
         Text(
             "把每一笔钱都变成看得懂的选择",
             style = MaterialTheme.typography.titleMedium,
@@ -51,7 +51,7 @@ fun OnboardingScreen(
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("从记下第一笔钱开始", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(
-                    "简账把账单、账户余额、固定支出和消费分析放在一起。核心数据保存在本机，不联网也能使用。",
+                    "拍小票或导入消费截图，核对后就能记账；账单、账户、预算和统计仍在一起。核心数据保存在本机。",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 FeatureLine(Icons.Default.AccountBalanceWallet, "账单和资产余额自动联动")

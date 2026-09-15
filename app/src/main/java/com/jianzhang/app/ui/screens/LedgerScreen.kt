@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -85,6 +86,7 @@ fun LedgerScreen(
     onOpenSettings: () -> Unit,
     onEdit: (TransactionEntity) -> Unit,
     onDelete: (String) -> Unit,
+    onOpenQuickEntry: () -> Unit,
     onCreateAccount: (String, AccountType, String) -> Unit,
     onGenerateDemo: () -> Unit
 ) {
@@ -262,6 +264,33 @@ fun LedgerScreen(
                     }
                 }
                 MonthNavigationButton(symbol = "›", description = "下个月", onClick = onMonthNext)
+            }
+        }
+        item(key = "quick-receipt-entry") {
+            Surface(
+                onClick = onOpenQuickEntry,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 5.dp),
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(34.dp))
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("简易记账", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("拍小票或导入截图，核对后记账", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Text("开始 ›", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
             }
         }
         item(key = "monthly-overview") {

@@ -43,7 +43,11 @@ class FinanceRepository(private val database: AppDatabase) {
         date: String,
         time: String,
         note: String,
-        sourceRecurringExpenseId: String? = null
+        sourceRecurringExpenseId: String? = null,
+        merchant: String? = null,
+        paymentMethod: String? = null,
+        orderId: String? = null,
+        importSource: String? = null
     ): String {
         require(amountInCents > 0) { "金额必须大于 0" }
         require(type != TransactionType.TRANSFER || (accountId != null && toAccountId != null && accountId != toAccountId)) {
@@ -70,6 +74,10 @@ class FinanceRepository(private val database: AppDatabase) {
                 note = note,
                 sourceRecurringExpenseId = sourceRecurringExpenseId ?: old?.sourceRecurringExpenseId,
                 isDemo = old?.isDemo ?: false,
+                merchant = merchant ?: old?.merchant,
+                paymentMethod = paymentMethod ?: old?.paymentMethod,
+                orderId = orderId ?: old?.orderId,
+                importSource = importSource ?: old?.importSource,
                 createdAt = old?.createdAt ?: now,
                 updatedAt = now
             )

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
@@ -27,10 +28,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.jianzhang.app.domain.ai.AiReceiptSettings
 import com.jianzhang.app.ui.components.AppCard
 import com.jianzhang.app.ui.components.BackTitleBar
 
@@ -40,8 +42,10 @@ fun SettingsScreen(
     onGenerateDemo: () -> Unit,
     onClearDemo: () -> Unit,
     onOpenAssets: () -> Unit,
+    onOpenAiSettings: () -> Unit,
     themeMode: String,
     onSetThemeMode: (String) -> Unit,
+    aiSettings: AiReceiptSettings,
     exportText: () -> String
 ) {
     val context = LocalContext.current
@@ -50,8 +54,8 @@ fun SettingsScreen(
     if (showAbout) {
         AlertDialog(
             onDismissRequest = { showAbout = false },
-            title = { Text("关于简账") },
-            text = { Text("简账是一款面向大学生和年轻用户的本地优先个人财务管理 App。\n\n核心数据保存在设备本地，帮助你完成记账、资产管理、固定支出和消费分析。") },
+            title = { Text("关于简账·慧录") },
+            text = { Text("简账·慧录支持本地票据识别，也允许用户配置自己的 AI 服务。\n\n只有启用云端 AI 后，用户主动选择的图片或 OCR 文字才会发送到所配置的服务商；应用不读取微信、支付宝账户，所有结果均需核对后入账。") },
             confirmButton = { TextButton(onClick = { showAbout = false }) { Text("知道了") } }
         )
     }
@@ -76,8 +80,8 @@ fun SettingsScreen(
             item {
                 AppCard {
                     Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("简账", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text("本地优先，把财务主动权留在自己手里。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("简账·慧录", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("本地识别或自定义 AI，核对后记账。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -109,6 +113,28 @@ fun SettingsScreen(
                             }
                         )
                     }
+                }
+            }
+            item {
+                Text("AI 识票", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 4.dp))
+                AppCard(modifier = Modifier.padding(top = 8.dp)) {
+                    ListItem(
+                        headlineContent = { Text("AI 服务管理") },
+                        supportingContent = {
+                            val active = aiSettings.activeProfile
+                            Text(
+                                when {
+                                    !aiSettings.enabled -> "未启用 · 已保存 ${aiSettings.profiles.size} 个服务"
+                                    active == null -> "尚未选择服务"
+                                    !active.isConfigured -> "${active.name} 配置不完整"
+                                    else -> "正在使用 ${active.name} · 已保存 ${aiSettings.profiles.size} 个服务"
+                                }
+                            )
+                        },
+                        leadingContent = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
+                        modifier = Modifier.fillMaxWidth(),
+                        trailingContent = { TextButton(onClick = onOpenAiSettings) { Text("管理") } }
+                    )
                 }
             }
             item {
@@ -146,8 +172,8 @@ fun SettingsScreen(
                 Text("关于", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 4.dp))
                 AppCard(modifier = Modifier.padding(top = 8.dp)) {
                     ListItem(
-                        headlineContent = { Text("关于简账") },
-                        supportingContent = { Text("版本 1.0 · 核心功能无需联网") },
+                        headlineContent = { Text("关于简账·慧录") },
+                        supportingContent = { Text("版本 1.0 · 本地识别与自定义 AI") },
                         leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
                         modifier = Modifier.fillMaxWidth(),
                         trailingContent = { TextButton(onClick = { showAbout = true }) { Text("查看") } }
