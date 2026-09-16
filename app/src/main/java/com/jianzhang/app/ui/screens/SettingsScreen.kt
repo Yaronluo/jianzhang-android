@@ -60,10 +60,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.jianzhang.app.domain.account.AccountSelectionPolicy
 import com.jianzhang.app.domain.ai.AiReceiptSettings
 import com.jianzhang.app.domain.ai.AiRecognitionMode
 import com.jianzhang.app.quickcapture.QuickCaptureAccessibilityService
-import com.jianzhang.app.quickcapture.QuickCaptureAccountPolicy
 import com.jianzhang.app.quickcapture.QuickCapturePreferences
 import com.jianzhang.app.quickcapture.QuickCaptureTileService
 import com.jianzhang.app.ui.FinanceUiState
@@ -91,11 +91,11 @@ fun SettingsScreen(
     var accessibilityRefresh by remember { mutableStateOf(0) }
     val quickCapturePreferences = remember(context) { QuickCapturePreferences(context) }
     var defaultAccountId by remember { mutableStateOf(quickCapturePreferences.defaultAccountId) }
-    val usableAccounts = QuickCaptureAccountPolicy.defaultCandidates(state.accounts)
+    val usableAccounts = AccountSelectionPolicy.transactionAccounts(state.accounts)
     LaunchedEffect(defaultAccountId, usableAccounts.map { it.id }) {
         if (defaultAccountId != null && usableAccounts.none { it.id == defaultAccountId }) {
-            // A deleted, disabled, or demo account must not remain selected
-            // after the account list changes.
+            // A deleted, disabled, or non-transaction account must not remain
+            // selected after the assets list changes.
             defaultAccountId = null
             quickCapturePreferences.defaultAccountId = null
         }
@@ -134,7 +134,7 @@ fun SettingsScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        "仅显示资产页中已启用、可用于记账的真实账户；演示账户不会用于一键直记。",
+                        "账户与资产页同步；演示资产也会显示，可用于功能测试。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

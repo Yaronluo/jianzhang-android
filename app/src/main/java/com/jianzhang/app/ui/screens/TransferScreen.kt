@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.jianzhang.app.data.local.entity.AccountEntity
 import com.jianzhang.app.data.local.entity.TransactionType
+import com.jianzhang.app.domain.account.AccountSelectionPolicy
 import com.jianzhang.app.ui.FinanceUiState
 import com.jianzhang.app.ui.components.AppCard
 import com.jianzhang.app.ui.components.AppDropdownField
@@ -57,9 +58,10 @@ fun TransferScreen(
     var amountError by remember { mutableStateOf(false) }
     var dateError by remember { mutableStateOf(false) }
     var accountsError by remember { mutableStateOf(false) }
-    val availableAccounts = state.accounts.filter {
-        it.canUseForTransactions || it.id == fromId || it.id == toId
-    }
+    val availableAccounts = AccountSelectionPolicy.transactionAccounts(
+        accounts = state.accounts,
+        retainedAccountIds = setOfNotNull(fromId, toId)
+    )
 
     Column(modifier = Modifier.fillMaxSize()) {
         BackTitleBar(title = if (editing == null) "账户转账" else "编辑转账", onBack = onBack)

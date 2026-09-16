@@ -26,6 +26,7 @@ import androidx.annotation.RequiresApi
 import com.jianzhang.app.MainActivity
 import com.jianzhang.app.data.local.AppDatabase
 import com.jianzhang.app.data.model.DefaultData
+import com.jianzhang.app.domain.account.AccountSelectionPolicy
 import com.jianzhang.app.domain.parser.ReceiptFieldConfidence
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -34,6 +35,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -126,10 +128,19 @@ class QuickCaptureAccessibilityService : AccessibilityService() {
             } finally {
                 bitmap.recycle()
             }
-            val preferred = QuickCapturePreferences(this).defaultAccountId
-            val validAccount = preferred?.let { AppDatabase.getInstance(this).financeDao().getAccount(it) }
-                ?.takeIf { QuickCaptureAccountPolicy.isEligibleDefaultAccount(it) }?.id
-            val draft = QuickCaptureDraft(sessionId, parsed, validAccount)
+            val accounts = AppDatabase.getInstance(this).financeDao().observeAccounts().first()
+            val resolvedAccountId = AccountSelectionPolicy.resolveReceiptAccountId(
+                accounts = accounts,
+                paymentMethod = parsed.paymentMethod,
+                defaultAccountId = QuickCapturePreferences(this).defaultAccountId,
+                recognitionText = parsed.rawText
+            )
+            val draft = QuickCaptureDraft(
+                sessionId = sessionId,
+                receipt = parsed,
+                resolvedAccountId = resolvedAccountId,
+                resolvedAccountName = accounts.firstOrNull { it.id == resolvedAccountId }?.name
+            )
             if (!QuickCaptureSessionRegistry.publishDraft(draft)) return
             showResult(draft)
         } catch (cancelled: CancellationException) {
@@ -190,9 +201,10 @@ class QuickCaptureAccessibilityService : AccessibilityService() {
         ) "部分字段置信度较低，请核对后记账" else "识别结果置信度较高"
         val direct = QuickCaptureEligibility.canDirectSave(draft)
         val category = DefaultData.categories.firstOrNull { it.id == receipt.categoryId }?.name ?: "其他"
+        val account = draft.resolvedAccountName ?: "待选择"
         showOverlay(
             title = receipt.merchant.ifBlank { "识别到一笔消费" },
-            message = "$amount\n$category  ·  ${receipt.date} ${receipt.time}\n${receipt.recognitionSource}\n$confidenceHint",
+            message = "$amount\n$category  ·  ${receipt.date} ${receipt.time}\n记账账户：$account\n${receipt.recognitionSource}\n$confidenceHint",
             buttons = listOf(
                 "修改" to { openEditor(draft.sessionId) },
                 (if (direct) "确认记账" else "核对后记账") to {
@@ -208,14 +220,14 @@ class QuickCaptureAccessibilityService : AccessibilityService() {
         showLoading("正在保存……", draft.sessionId)
         scope.launch {
             runCatching { QuickReceiptSaveUseCase(this@QuickCaptureAccessibilityService).save(draft) }
-                .onSuccess {
+                .onSuccess { result ->
                     QuickCaptureSessionRegistry.finish(draft.sessionId, QuickCaptureState.SUCCESS)
                     val amount = draft.receipt.amountInCents ?: 0L
                     QuickCaptureTileService.updateState(
                         this@QuickCaptureAccessibilityService,
                         String.format(Locale.CHINA, "¥%.2f", amount / 100.0)
                     )
-                    showOverlay("✓ 记账成功", "账单已同步到账本、账户余额、预算与统计。", true)
+                    showOverlay("✓ 记账成功", "已记入：${result.accountName}\n账单已同步到账本、账户余额、预算与统计。", true)
                     delay(1_500)
                     removeOverlay()
                     QuickCaptureSessionRegistry.reset(draft.sessionId)

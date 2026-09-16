@@ -41,7 +41,7 @@ class QuickCaptureSessionTest {
     }
 
     @Test
-    fun directSave_requiresHighConfidenceAndDefaultAccount() {
+    fun directSave_requiresHighConfidenceAndResolvedAccount() {
         assertTrue(QuickCaptureEligibility.canDirectSave(QuickCaptureDraft("one", receipt(), "cash")))
         assertFalse(QuickCaptureEligibility.canDirectSave(QuickCaptureDraft("two", receipt(), null)))
         assertFalse(

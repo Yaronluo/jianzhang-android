@@ -69,6 +69,7 @@ import com.jianzhang.app.data.local.entity.RecurringCycle
 import com.jianzhang.app.data.local.entity.RecurringExpenseEntity
 import com.jianzhang.app.data.local.entity.TransactionEntity
 import com.jianzhang.app.data.local.entity.TransactionType
+import com.jianzhang.app.domain.account.AccountSelectionPolicy
 import com.jianzhang.app.ui.FinanceUiState
 import com.jianzhang.app.ui.components.AppCard
 import com.jianzhang.app.ui.components.AppDropdownItem
@@ -337,7 +338,11 @@ private fun RecurringDialog(
             .sortedBy { it.sortOrder }
     }
     val category = expenseCategories.firstOrNull { it.id == categoryId }
-    val account = state.accounts.firstOrNull { it.id == accountId }
+    val availableAccounts = AccountSelectionPolicy.transactionAccounts(
+        accounts = state.accounts,
+        retainedAccountIds = setOfNotNull(accountId)
+    )
+    val account = availableAccounts.firstOrNull { it.id == accountId }
     val cycle = runCatching { RecurringCycle.valueOf(cycleName) }.getOrDefault(RecurringCycle.MONTHLY)
     val dateValid = runCatching { LocalDate.parse(nextDate.trim()) }.isSuccess
     val canSubmit = name.isNotBlank() && parseMoneyToCents(amount) != null && dateValid
@@ -599,7 +604,7 @@ private fun RecurringDialog(
                                 )
                             },
                             menuContent = { dismiss ->
-                                state.accounts.forEach { item ->
+                                availableAccounts.forEach { item ->
                                     AppDropdownItem(
                                         text = item.name,
                                         selected = item.id == accountId,

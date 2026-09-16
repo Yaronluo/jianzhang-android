@@ -23,7 +23,8 @@ enum class QuickCaptureState {
 data class QuickCaptureDraft(
     val sessionId: String,
     val receipt: ParsedReceipt,
-    val defaultAccountId: String?
+    val resolvedAccountId: String?,
+    val resolvedAccountName: String? = null
 )
 
 /** Process-local state shared by the tile, accessibility service and confirmation activity. */
@@ -115,7 +116,7 @@ object QuickCaptureEligibility {
             runCatching { LocalDate.parse(receipt.date) }.isSuccess &&
             runCatching { LocalTime.parse(receipt.time) }.isSuccess &&
             receipt.categoryId.isNotBlank() &&
-            draft.defaultAccountId != null &&
+            draft.resolvedAccountId != null &&
             receipt.amountConfidence == ReceiptFieldConfidence.HIGH &&
             receipt.dateConfidence == ReceiptFieldConfidence.HIGH &&
             receipt.categoryConfidence == ReceiptFieldConfidence.HIGH

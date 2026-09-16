@@ -5,11 +5,16 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.jianzhang.app.data.local.AppDatabase
+import com.jianzhang.app.data.local.entity.AccountEntity
 import com.jianzhang.app.data.local.entity.AccountType
 import com.jianzhang.app.data.local.entity.RecurringCycle
 import com.jianzhang.app.data.local.entity.TransactionType
 import com.jianzhang.app.data.model.DefaultData
 import com.jianzhang.app.data.repository.FinanceRepository
+import com.jianzhang.app.domain.parser.ParsedReceipt
+import com.jianzhang.app.domain.parser.ReceiptFieldConfidence
+import com.jianzhang.app.quickcapture.QuickCaptureDraft
+import com.jianzhang.app.quickcapture.QuickReceiptSaveUseCase
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -22,6 +27,78 @@ import java.time.LocalDate
 
 @RunWith(AndroidJUnit4::class)
 class FinanceDeviceTest {
+    @Test
+    fun directQuickCaptureSaveUsesRecognizedExistingAccountBeforeDefault() = runBlocking {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            AppDatabase::class.java
+        ).allowMainThreadQueries().build()
+        val repository = FinanceRepository(database)
+        repository.ensureDefaults()
+        val now = System.currentTimeMillis()
+        val defaultCash = AccountEntity(
+            id = "cash",
+            name = "现金",
+            type = AccountType.CASH,
+            balanceInCents = 10_000L,
+            icon = "💵",
+            createdAt = now,
+            updatedAt = now
+        )
+        val genericDemoBank = AccountEntity(
+            id = "demo-bank",
+            name = "银行卡",
+            type = AccountType.BANK_CARD,
+            balanceInCents = 10_000L,
+            icon = "🏦",
+            isDemo = true,
+            createdAt = now,
+            updatedAt = now
+        )
+        val industrialBank = AccountEntity(
+            id = "icbc",
+            name = "工商银行",
+            type = AccountType.BANK_CARD,
+            balanceInCents = 10_000L,
+            icon = "🏦",
+            createdAt = now,
+            updatedAt = now
+        )
+        database.financeDao().insertAccount(defaultCash)
+        database.financeDao().insertAccount(genericDemoBank)
+        database.financeDao().insertAccount(industrialBank)
+
+        val result = QuickReceiptSaveUseCase(database).save(
+            QuickCaptureDraft(
+                sessionId = "device-regression",
+                receipt = ParsedReceipt(
+                    rawText = "支付方式 工商银行储蓄卡(3679)",
+                    amountInCents = 730L,
+                    amountKeyword = "实付",
+                    amountConfidence = ReceiptFieldConfidence.HIGH,
+                    date = "2026-09-13",
+                    dateConfidence = ReceiptFieldConfidence.HIGH,
+                    time = "18:40",
+                    merchant = "学森购物超市",
+                    paymentMethod = "",
+                    categoryId = DefaultData.SHOPPING,
+                    categoryConfidence = ReceiptFieldConfidence.HIGH,
+                    warnings = emptyList(),
+                    recognitionSource = "设备回归测试"
+                ),
+                resolvedAccountId = defaultCash.id,
+                resolvedAccountName = defaultCash.name
+            )
+        )
+
+        val saved = requireNotNull(database.financeDao().getTransaction(result.transactionId))
+        assertEquals(industrialBank.id, saved.accountId)
+        assertEquals(industrialBank.name, result.accountName)
+        assertEquals(9_270L, database.financeDao().getAccount(industrialBank.id)?.balanceInCents)
+        assertEquals(10_000L, database.financeDao().getAccount(defaultCash.id)?.balanceInCents)
+        database.close()
+    }
+
     @Test
     fun mainActivityIsRegisteredAsLauncher() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

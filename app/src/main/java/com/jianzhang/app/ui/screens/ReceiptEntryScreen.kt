@@ -56,8 +56,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.jianzhang.app.data.local.entity.AccountEntity
-import com.jianzhang.app.data.local.entity.AccountType
 import com.jianzhang.app.data.local.entity.CategoryType
+import com.jianzhang.app.domain.account.AccountSelectionPolicy
 import com.jianzhang.app.domain.ai.AiReceiptClient
 import com.jianzhang.app.domain.ai.AiReceiptConfig
 import com.jianzhang.app.domain.ai.AiReceiptSettings
@@ -390,7 +390,7 @@ private fun ReceiptConfirmation(
     onSave: (String, String, String?, String, String, String, String, String) -> Unit
 ) {
     val categories = state.categories.filter { it.type == CategoryType.EXPENSE && it.enabled }
-    val accounts = state.accounts.filter { it.enabled && it.canUseForTransactions }
+    val accounts = AccountSelectionPolicy.transactionAccounts(state.accounts)
     var amount by remember(parsed) { mutableStateOf(parsed.amountInCents?.let(::formatInputMoney).orEmpty()) }
     var date by remember(parsed) { mutableStateOf(parsed.date) }
     var time by remember(parsed) { mutableStateOf(parsed.time) }
@@ -400,8 +400,12 @@ private fun ReceiptConfirmation(
     }
     var accountId by remember(parsed, accounts, preferredAccountId) {
         mutableStateOf(
-            preferredAccountId?.takeIf { preferred -> accounts.any { it.id == preferred } }
-                ?: suggestedAccountId(accounts, parsed.paymentMethod)
+            AccountSelectionPolicy.resolveReceiptAccountId(
+                accounts = accounts,
+                paymentMethod = parsed.paymentMethod,
+                defaultAccountId = preferredAccountId,
+                recognitionText = parsed.rawText
+            )
         )
     }
     var note by remember(parsed) { mutableStateOf("") }
@@ -668,23 +672,6 @@ private fun ReceiptAccountSelector(
             )
         }
     }
-}
-
-private fun suggestedAccountId(accounts: List<AccountEntity>, paymentMethod: String): String? {
-    if (accounts.isEmpty()) return null
-    if (paymentMethod.isBlank()) return accounts.first().id
-    accounts.firstOrNull { account ->
-        paymentMethod.contains(account.name, ignoreCase = true)
-    }?.let { return it.id }
-    val suggestedType = when {
-        paymentMethod.contains("信用卡") -> AccountType.CREDIT_CARD
-        paymentMethod.contains("储蓄卡") || paymentMethod.contains("银行卡") || paymentMethod.contains("银行") -> AccountType.BANK_CARD
-        paymentMethod.contains("零钱") || paymentMethod.contains("微信") -> AccountType.WECHAT
-        paymentMethod.contains("支付宝") -> AccountType.ALIPAY
-        paymentMethod.contains("现金") -> AccountType.CASH
-        else -> null
-    }
-    return accounts.firstOrNull { it.type == suggestedType }?.id ?: accounts.first().id
 }
 
 private fun createCameraUri(context: Context): Uri {

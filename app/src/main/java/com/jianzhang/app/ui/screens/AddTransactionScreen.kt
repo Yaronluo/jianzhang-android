@@ -66,6 +66,7 @@ import com.jianzhang.app.data.local.entity.AccountEntity
 import com.jianzhang.app.data.local.entity.CategoryEntity
 import com.jianzhang.app.data.local.entity.CategoryType
 import com.jianzhang.app.data.local.entity.TransactionType
+import com.jianzhang.app.domain.account.AccountSelectionPolicy
 import com.jianzhang.app.domain.parser.NaturalLanguageParser
 import com.jianzhang.app.domain.parser.ParsedTransaction
 import com.jianzhang.app.ui.FinanceUiState
@@ -140,9 +141,10 @@ fun AddTransactionScreen(
         TransactionType.EXPENSE -> EntryExpenseColor
         TransactionType.INCOME, TransactionType.TRANSFER -> MaterialTheme.colorScheme.primary
     }
-    val availableAccounts = state.accounts.filter {
-        it.canUseForTransactions || it.id == accountId || it.id == fromAccountId || it.id == toAccountId
-    }
+    val availableAccounts = AccountSelectionPolicy.transactionAccounts(
+        accounts = state.accounts,
+        retainedAccountIds = setOfNotNull(accountId, fromAccountId, toAccountId)
+    )
     val timeLabel = remember(transactionId) {
         editing?.time ?: LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
     }

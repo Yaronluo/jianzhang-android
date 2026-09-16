@@ -210,7 +210,7 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                             state = state,
                             aiSettings = aiSettings,
                             initialReceipt = draft.receipt,
-                            preferredAccountId = draft.defaultAccountId,
+                            preferredAccountId = draft.resolvedAccountId,
                             requireAccount = true,
                             onBack = ::cancelQuickEditor,
                             onSave = { amount, category, account, date, time, merchant, paymentMethod, note ->
