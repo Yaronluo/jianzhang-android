@@ -73,6 +73,7 @@ import com.jianzhang.app.ui.FinanceUiState
 import com.jianzhang.app.ui.components.AppCard
 import com.jianzhang.app.ui.components.AppDropdownItem
 import com.jianzhang.app.ui.components.AppDropdownMenu
+import com.jianzhang.app.ui.components.AccountTypeIcon
 import com.jianzhang.app.ui.components.CategoryIcon
 import com.jianzhang.app.ui.components.CollapsingTitleHeader
 import com.jianzhang.app.ui.components.EmptyState
@@ -600,8 +601,15 @@ private fun RecurringDialog(
                             menuContent = { dismiss ->
                                 state.accounts.forEach { item ->
                                     AppDropdownItem(
-                                        text = "${item.icon} ${item.name}",
+                                        text = item.name,
                                         selected = item.id == accountId,
+                                        leadingContent = {
+                                            AccountTypeIcon(
+                                                type = item.type,
+                                                modifier = Modifier.size(22.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        },
                                         onClick = {
                                             accountId = item.id
                                             dismiss()

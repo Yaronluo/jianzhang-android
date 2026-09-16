@@ -883,13 +883,19 @@ fun AssetCardRow(
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
         ) {
-            Text(account.icon, style = MaterialTheme.typography.bodyLarge)
+            AccountTypeIcon(
+                type = account.type,
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                contentDescription = account.name
+            )
         }
         Text(
-            account.name,
+            if (account.isDemo) "${account.name} · 演示" else account.name,
             modifier = Modifier.weight(1f).padding(start = 10.dp, end = 8.dp),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
+            color = if (account.isDemo) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )

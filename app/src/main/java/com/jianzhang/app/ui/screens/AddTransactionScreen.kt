@@ -73,6 +73,7 @@ import com.jianzhang.app.ui.components.CategoryIcon
 import com.jianzhang.app.ui.components.AppDropdownField
 import com.jianzhang.app.ui.components.AppDropdownItem
 import com.jianzhang.app.ui.components.AppDropdownMenu
+import com.jianzhang.app.ui.components.AccountTypeIcon
 import com.jianzhang.app.util.formatDate
 import com.jianzhang.app.util.formatInputMoney
 import com.jianzhang.app.util.formatMoney
@@ -554,16 +555,32 @@ private fun TransferAccountPicker(
     val selected = accounts.firstOrNull { it.id == selectedId }
     AppDropdownField(
         label = label,
-        value = selected?.let { "${it.icon} ${it.name}" } ?: "",
+        value = selected?.name ?: "",
         placeholder = "请选择账户",
         modifier = Modifier.fillMaxWidth(),
-        supportingText = selected?.let { formatMoney(it.balanceInCents) }
+        supportingText = selected?.let { formatMoney(it.balanceInCents) },
+        leadingContent = selected?.let { account ->
+            {
+                AccountTypeIcon(
+                    type = account.type,
+                    modifier = Modifier.size(22.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     ) { dismiss ->
         accounts.filter { it.id != excludedId }.forEach { account ->
             AppDropdownItem(
-                text = "${account.icon} ${account.name}",
+                text = account.name,
                 supportingText = formatMoney(account.balanceInCents),
                 selected = account.id == selectedId,
+                leadingContent = {
+                    AccountTypeIcon(
+                        type = account.type,
+                        modifier = Modifier.size(22.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
                 onClick = {
                     onSelected(account.id)
                     dismiss()
@@ -636,7 +653,13 @@ private fun AccountMetadataChip(
                     modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(selected?.icon ?: "💳", fontSize = 16.sp)
+                    if (selected != null) {
+                        AccountTypeIcon(
+                            type = selected.type,
+                            modifier = Modifier.size(18.dp),
+                            tint = EntryAccountContentColor
+                        )
+                    }
                     Text(
                         selected?.name ?: "选择账户",
                         modifier = Modifier.padding(start = 5.dp),
@@ -666,8 +689,15 @@ private fun AccountMetadataChip(
             )
             accounts.forEach { account ->
                 AppDropdownItem(
-                    text = "${account.icon} ${account.name}",
+                    text = account.name,
                     selected = account.id == selectedAccountId,
+                    leadingContent = {
+                        AccountTypeIcon(
+                            type = account.type,
+                            modifier = Modifier.size(22.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
                     onClick = {
                         onSelected(account.id)
                         dismiss()

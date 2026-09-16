@@ -2,6 +2,7 @@ package com.jianzhang.app.ui.screens
 
 import android.content.Context
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -67,6 +68,7 @@ import com.jianzhang.app.domain.parser.ReceiptParser
 import com.jianzhang.app.ui.FinanceUiState
 import com.jianzhang.app.ui.components.AppDropdownField
 import com.jianzhang.app.ui.components.AppDropdownItem
+import com.jianzhang.app.ui.components.AccountTypeIcon
 import com.jianzhang.app.ui.components.BackTitleBar
 import com.jianzhang.app.util.formatInputMoney
 import com.jianzhang.app.util.parseMoneyToCents
@@ -86,6 +88,9 @@ private sealed interface ReceiptEntryPhase {
 fun ReceiptEntryScreen(
     state: FinanceUiState,
     aiSettings: AiReceiptSettings,
+    initialReceipt: ParsedReceipt? = null,
+    preferredAccountId: String? = null,
+    requireAccount: Boolean = false,
     onBack: () -> Unit,
     onSave: (
         amount: String,
@@ -101,8 +106,22 @@ fun ReceiptEntryScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val aiConfig = aiSettings.activeConfig
-    var phase by remember { mutableStateOf<ReceiptEntryPhase>(ReceiptEntryPhase.ChooseSource) }
+    var phase by remember(initialReceipt) {
+        mutableStateOf<ReceiptEntryPhase>(
+            initialReceipt?.let(ReceiptEntryPhase::Confirm) ?: ReceiptEntryPhase.ChooseSource
+        )
+    }
     var pendingCameraUri by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun handleBack() {
+        if (initialReceipt != null || phase !is ReceiptEntryPhase.Confirm) {
+            onBack()
+        } else {
+            phase = ReceiptEntryPhase.ChooseSource
+        }
+    }
+
+    BackHandler(onBack = ::handleBack)
 
     fun processImage(uri: Uri) {
         phase = ReceiptEntryPhase.Recognizing
@@ -198,7 +217,9 @@ fun ReceiptEntryScreen(
             is ReceiptEntryPhase.Confirm -> ReceiptConfirmation(
                 state = state,
                 parsed = current.receipt,
-                onBack = { phase = ReceiptEntryPhase.ChooseSource },
+                preferredAccountId = preferredAccountId,
+                requireAccount = requireAccount,
+                onBack = ::handleBack,
                 onSave = onSave
             )
         }
@@ -363,6 +384,8 @@ private fun ReceiptFailure(
 private fun ReceiptConfirmation(
     state: FinanceUiState,
     parsed: ParsedReceipt,
+    preferredAccountId: String?,
+    requireAccount: Boolean,
     onBack: () -> Unit,
     onSave: (String, String, String?, String, String, String, String, String) -> Unit
 ) {
@@ -375,14 +398,20 @@ private fun ReceiptConfirmation(
     var categoryId by remember(parsed, categories) {
         mutableStateOf(parsed.categoryId.takeIf { id -> categories.any { it.id == id } } ?: categories.firstOrNull()?.id.orEmpty())
     }
-    var accountId by remember(parsed, accounts) { mutableStateOf(suggestedAccountId(accounts, parsed.paymentMethod)) }
+    var accountId by remember(parsed, accounts, preferredAccountId) {
+        mutableStateOf(
+            preferredAccountId?.takeIf { preferred -> accounts.any { it.id == preferred } }
+                ?: suggestedAccountId(accounts, parsed.paymentMethod)
+        )
+    }
     var note by remember(parsed) { mutableStateOf("") }
     var amountReviewed by remember(parsed) { mutableStateOf(!parsed.amountNeedsReview) }
     var showRawText by rememberSaveable(parsed.rawText) { mutableStateOf(false) }
     val amountValid = parseMoneyToCents(amount) != null
     val dateValid = runCatching { LocalDate.parse(date) }.isSuccess
     val timeValid = runCatching { LocalTime.parse(time) }.isSuccess
-    val canSave = amountValid && dateValid && timeValid && categoryId.isNotBlank() && amountReviewed
+    val canSave = amountValid && dateValid && timeValid && categoryId.isNotBlank() && amountReviewed &&
+        (!requireAccount || accountId != null)
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
@@ -518,7 +547,8 @@ private fun ReceiptConfirmation(
                     !amountReviewed -> "请先核对金额"
                     !amountValid -> "请填写正确金额"
                     !dateValid || !timeValid -> "请填写正确日期和时间"
-                    else -> "请选择消费分类"
+                    categoryId.isBlank() -> "请选择消费分类"
+                    else -> "请选择记账账户"
                 },
                 modifier = Modifier.align(Alignment.CenterHorizontally),
                 color = MaterialTheme.colorScheme.error
@@ -595,12 +625,21 @@ private fun ReceiptAccountSelector(
     val selected = accounts.firstOrNull { it.id == selectedId }
     AppDropdownField(
         label = "账户",
-        value = selected?.let { "${it.icon} ${it.name}" } ?: "",
+        value = selected?.name ?: "",
         placeholder = "不关联账户",
         supportingText = recognizedPaymentMethod
             .takeIf { it.isNotBlank() }
             ?.let { "识别到付款方式：$it" },
         modifier = Modifier.fillMaxWidth(),
+        leadingContent = selected?.let { account ->
+            {
+                AccountTypeIcon(
+                    type = account.type,
+                    modifier = Modifier.size(22.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
     ) { dismiss ->
         AppDropdownItem(
@@ -613,8 +652,15 @@ private fun ReceiptAccountSelector(
         )
         accounts.forEach { account ->
             AppDropdownItem(
-                text = "${account.icon} ${account.name}",
+                text = account.name,
                 selected = account.id == selectedId,
+                leadingContent = {
+                    AccountTypeIcon(
+                        type = account.type,
+                        modifier = Modifier.size(22.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
                 onClick = {
                     onSelected(account.id)
                     dismiss()

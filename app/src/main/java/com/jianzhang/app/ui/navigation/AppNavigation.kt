@@ -39,6 +39,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
@@ -64,6 +66,8 @@ import com.jianzhang.app.ui.screens.ReceiptEntryScreen
 import com.jianzhang.app.ui.screens.SettingsScreen
 import com.jianzhang.app.ui.screens.StatisticsScreen
 import com.jianzhang.app.ui.screens.TransferScreen
+import com.jianzhang.app.quickcapture.QuickCaptureSessionRegistry
+import com.jianzhang.app.quickcapture.QuickCaptureTileService
 
 private data class BottomDestination(
     val route: String,
@@ -80,9 +84,11 @@ private val bottomDestinations = listOf(
 
 @Composable
 fun JianzhangApp(viewModel: FinanceViewModel) {
+    val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val aiSettings by viewModel.aiSettings.collectAsStateWithLifecycle()
+    val navigationRequest by viewModel.navigationRequest.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     var recurringAddRequested by rememberSaveable { mutableStateOf(false) }
     var assetAddRequested by rememberSaveable { mutableStateOf(false) }
@@ -93,6 +99,12 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { message -> snackbarHostState.showSnackbar(message) }
+    }
+    LaunchedEffect(navigationRequest) {
+        navigationRequest?.let { requested ->
+            navController.navigate(requested) { launchSingleTop = true }
+            viewModel.consumeNavigationRequest()
+        }
     }
 
     val showBottomBar = route in setOf("ledger", "recurring", "assets", "statistics")
@@ -166,6 +178,49 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                             navController.popBackStack()
                         }
                     )
+                }
+            }
+            composable(
+                route = "receipt-quick/{sessionId}",
+                arguments = listOf(navArgument("sessionId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val sessionId = backStackEntry.arguments?.getString("sessionId").orEmpty()
+                val draft = QuickCaptureSessionRegistry.getDraft(sessionId)
+                fun cancelQuickEditor() {
+                    if (QuickCaptureSessionRegistry.cancelIfAwaiting(sessionId)) {
+                        QuickCaptureTileService.reset(context)
+                    }
+                    navController.popBackStack()
+                }
+                DisposableEffect(sessionId) {
+                    onDispose {
+                        if (QuickCaptureSessionRegistry.cancelIfAwaiting(sessionId)) {
+                            QuickCaptureTileService.reset(context)
+                        }
+                    }
+                }
+                ScreenWithInsets(scaffoldPadding = padding, topInset = false, bottomInset = false) {
+                    if (draft == null) {
+                        LaunchedEffect(sessionId) {
+                            QuickCaptureTileService.reset(context)
+                            navController.popBackStack()
+                        }
+                    } else {
+                        ReceiptEntryScreen(
+                            state = state,
+                            aiSettings = aiSettings,
+                            initialReceipt = draft.receipt,
+                            preferredAccountId = draft.defaultAccountId,
+                            requireAccount = true,
+                            onBack = ::cancelQuickEditor,
+                            onSave = { amount, category, account, date, time, merchant, paymentMethod, note ->
+                                val saving = viewModel.saveQuickCaptureReceipt(
+                                    sessionId, amount, category, account, date, time, merchant, paymentMethod, note
+                                )
+                                if (saving) navController.popBackStack()
+                            }
+                        )
+                    }
                 }
             }
             composable("add") {
@@ -265,6 +320,7 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
             composable("settings") {
                 ScreenWithInsets(scaffoldPadding = padding) {
                     SettingsScreen(
+                        state = state,
                         onBack = { navController.popBackStack() },
                         onGenerateDemo = viewModel::generateDemoData,
                         onClearDemo = viewModel::clearDemoData,

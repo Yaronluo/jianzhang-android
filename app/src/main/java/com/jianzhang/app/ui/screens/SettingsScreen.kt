@@ -1,6 +1,11 @@
 package com.jianzhang.app.ui.screens
 
 import android.content.Intent
+import android.app.StatusBarManager
+import android.content.ComponentName
+import android.os.Build
+import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -26,6 +31,8 @@ import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
@@ -37,10 +44,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -48,12 +57,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.jianzhang.app.domain.ai.AiReceiptSettings
+import com.jianzhang.app.domain.ai.AiRecognitionMode
+import com.jianzhang.app.quickcapture.QuickCaptureAccessibilityService
+import com.jianzhang.app.quickcapture.QuickCaptureAccountPolicy
+import com.jianzhang.app.quickcapture.QuickCapturePreferences
+import com.jianzhang.app.quickcapture.QuickCaptureTileService
+import com.jianzhang.app.ui.FinanceUiState
 import com.jianzhang.app.ui.components.AppCard
 import com.jianzhang.app.ui.components.BackTitleBar
 
 @Composable
 fun SettingsScreen(
+    state: FinanceUiState,
     onBack: () -> Unit,
     onGenerateDemo: () -> Unit,
     onClearDemo: () -> Unit,
@@ -65,8 +84,30 @@ fun SettingsScreen(
     exportText: () -> String
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var showAbout by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
+    var showAccountPicker by remember { mutableStateOf(false) }
+    var accessibilityRefresh by remember { mutableStateOf(0) }
+    val quickCapturePreferences = remember(context) { QuickCapturePreferences(context) }
+    var defaultAccountId by remember { mutableStateOf(quickCapturePreferences.defaultAccountId) }
+    val usableAccounts = QuickCaptureAccountPolicy.defaultCandidates(state.accounts)
+    LaunchedEffect(defaultAccountId, usableAccounts.map { it.id }) {
+        if (defaultAccountId != null && usableAccounts.none { it.id == defaultAccountId }) {
+            // A deleted, disabled, or demo account must not remain selected
+            // after the account list changes.
+            defaultAccountId = null
+            quickCapturePreferences.defaultAccountId = null
+        }
+    }
+    val accessibilityEnabled = remember(accessibilityRefresh) { QuickCaptureAccessibilityService.isEnabled(context) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) accessibilityRefresh++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     if (showAbout) {
         AlertDialog(
             onDismissRequest = { showAbout = false },
@@ -84,6 +125,36 @@ fun SettingsScreen(
                 TextButton(onClick = { onClearDemo(); showClearConfirm = false }) { Text("清除", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { showClearConfirm = false }) { Text("取消") } }
+        )
+    }
+    if (showAccountPicker) {
+        AlertDialog(
+            onDismissRequest = { showAccountPicker = false },
+            title = { Text("选择默认记账账户") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "仅显示资产页中已启用、可用于记账的真实账户；演示账户不会用于一键直记。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (usableAccounts.isEmpty()) {
+                        Text("请先在资产页添加或启用一个可用于记账的账户。")
+                    } else {
+                        usableAccounts.forEach { account ->
+                            TextButton(
+                                onClick = {
+                                    defaultAccountId = account.id
+                                    quickCapturePreferences.defaultAccountId = account.id
+                                    showAccountPicker = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text(if (account.id == defaultAccountId) "✓ ${account.name}" else account.name) }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showAccountPicker = false }) { Text("关闭") } }
         )
     }
 
@@ -170,6 +241,72 @@ fun SettingsScreen(
                         actionLabel = "管理",
                         onClick = onOpenAiSettings
                     )
+                }
+            }
+            item {
+                SettingsSectionTitle("一键慧录")
+                AppCard(modifier = Modifier.padding(top = 10.dp)) {
+                    Column {
+                        SettingsActionRow(
+                            icon = Icons.Default.TouchApp,
+                            title = "无障碍截屏服务",
+                            subtitle = if (accessibilityEnabled) "已开启 · 仅点击磁贴时截屏" else "未开启 · 需要允许截屏与临时卡片",
+                            actionLabel = if (accessibilityEnabled) "已开启" else "开启",
+                            onClick = {
+                                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                            }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 18.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
+                        SettingsActionRow(
+                            icon = Icons.Default.AutoAwesome,
+                            title = "当前识别模式",
+                            subtitle = when (aiSettings.mode) {
+                                AiRecognitionMode.VISION -> "AI"
+                                AiRecognitionMode.OCR_TEXT -> "AI+OCR"
+                                AiRecognitionMode.LOCAL -> "OCR"
+                            },
+                            actionLabel = "管理",
+                            onClick = onOpenAiSettings
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 18.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
+                        SettingsActionRow(
+                            icon = Icons.Default.Wallet,
+                            title = "默认记账账户",
+                            subtitle = usableAccounts.firstOrNull { it.id == defaultAccountId }?.name ?: "未设置，识别后需进入核对页",
+                            actionLabel = "选择",
+                            onClick = { showAccountPicker = true }
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        context.getSystemService(StatusBarManager::class.java).requestAddTileService(
+                                            ComponentName(context, QuickCaptureTileService::class.java),
+                                            "截屏记账",
+                                            android.graphics.drawable.Icon.createWithResource(context, com.jianzhang.app.R.drawable.ic_quick_capture_tile),
+                                            context.mainExecutor
+                                        ) { result ->
+                                            Toast.makeText(context, if (result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED) "已添加到控制中心" else "请在控制中心编辑页手动添加", Toast.LENGTH_LONG).show()
+                                        }
+                                    } else {
+                                        Toast.makeText(context, "请下拉控制中心，点击编辑并添加“截屏记账”", Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("添加到控制中心") }
+                            OutlinedButton(
+                                onClick = {
+                                    val service = QuickCaptureAccessibilityService.connectedInstance
+                                    if (service != null) service.showTestCard()
+                                    else Toast.makeText(context, "请先开启无障碍截屏服务", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("测试识别卡片") }
+                        }
+                    }
                 }
             }
             item {

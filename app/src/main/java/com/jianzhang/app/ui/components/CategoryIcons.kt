@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathBuilder
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
+import com.jianzhang.app.data.local.entity.AccountType
 import com.jianzhang.app.data.model.DefaultData
 import kotlin.math.PI
 import kotlin.math.cos
@@ -132,6 +133,31 @@ fun CategoryIcon(
     )
 }
 
+/** Account icons use the same single-color monoline language as categories. */
+@androidx.compose.runtime.Composable
+fun AccountTypeIcon(
+    type: AccountType,
+    modifier: Modifier = Modifier.size(24.dp),
+    tint: Color? = null,
+    contentDescription: String? = null
+) {
+    Icon(
+        imageVector = accountTypeIcon(type),
+        contentDescription = contentDescription,
+        modifier = modifier,
+        tint = tint ?: LedgerIconColor
+    )
+}
+
+fun accountTypeIcon(type: AccountType): ImageVector = when (type) {
+    AccountType.CASH -> AccountCashIcon
+    AccountType.BANK_CARD -> AccountBankCardIcon
+    AccountType.ALIPAY -> AccountAlipayIcon
+    AccountType.WECHAT -> AccountWechatIcon
+    AccountType.CREDIT_CARD -> AccountCreditCardIcon
+    AccountType.OTHER -> AccountInvestmentIcon
+}
+
 private fun monolineIcon(
     name: String,
     content: ImageVector.Builder.() -> Unit
@@ -219,6 +245,101 @@ private fun PathBuilder.plus(centerX: Float, centerY: Float, size: Float) {
     horizontalLineTo(centerX + size)
     moveTo(centerX, centerY - size)
     verticalLineTo(centerY + size)
+}
+
+private val AccountCashIcon = monolineIcon("AccountCash") {
+    outlinePath {
+        roundedRect(6f, 12f, 42f, 36f, 5f)
+        moveTo(6f, 18f)
+        horizontalLineTo(42f)
+        circle(24f, 27f, 5f)
+        currencySign(24f, 27f, 2.8f)
+        moveTo(11f, 31f)
+        horizontalLineTo(14f)
+        moveTo(34f, 23f)
+        horizontalLineTo(37f)
+    }
+}
+
+private val AccountBankCardIcon = monolineIcon("AccountBankCard") {
+    outlinePath {
+        roundedRect(5f, 9f, 43f, 38f, 5f)
+        moveTo(5f, 17f)
+        horizontalLineTo(43f)
+        roundedRect(10f, 23f, 20f, 30f, 1.5f)
+        moveTo(27f, 25f)
+        horizontalLineTo(37f)
+        moveTo(27f, 30f)
+        horizontalLineTo(34f)
+    }
+}
+
+private val AccountAlipayIcon = monolineIcon("AccountAlipay") {
+    outlinePath {
+        // A compact 支-shaped mark plus the familiar Alipay sweep.
+        moveTo(13f, 13f)
+        horizontalLineTo(35f)
+        moveTo(24f, 8f)
+        verticalLineTo(24f)
+        moveTo(16f, 20f)
+        horizontalLineTo(33f)
+        moveTo(19f, 21f)
+        curveTo(21f, 27f, 27f, 31f, 35f, 33f)
+        moveTo(31f, 20f)
+        curveTo(28f, 29f, 21f, 35f, 11f, 38f)
+        moveTo(8f, 32f)
+        curveTo(18f, 30f, 31f, 32f, 40f, 38f)
+    }
+}
+
+private val AccountWechatIcon = monolineIcon("AccountWechat") {
+    outlinePath {
+        // Two overlapping chat bubbles are WeChat's most recognizable cue.
+        ellipse(19f, 20f, 12f, 9f)
+        moveTo(10f, 26f)
+        lineTo(8f, 32f)
+        lineTo(15f, 29f)
+        circle(15f, 19f, 1.2f)
+        circle(23f, 19f, 1.2f)
+        ellipse(30f, 29f, 11f, 8f)
+        moveTo(37f, 35f)
+        lineTo(40f, 39f)
+        lineTo(34f, 37f)
+        circle(27f, 28f, 1.1f)
+        circle(34f, 28f, 1.1f)
+    }
+}
+
+private val AccountCreditCardIcon = monolineIcon("AccountCreditCard") {
+    outlinePath {
+        roundedRect(5f, 11f, 40f, 36f, 5f)
+        moveTo(5f, 18f)
+        horizontalLineTo(40f)
+        roundedRect(10f, 23f, 19f, 29f, 1.5f)
+        moveTo(26f, 28f)
+        horizontalLineTo(34f)
+        star(39f, 11f, 5f)
+    }
+}
+
+private val AccountInvestmentIcon = monolineIcon("AccountInvestment") {
+    outlinePath {
+        moveTo(7f, 39f)
+        verticalLineTo(10f)
+        moveTo(7f, 39f)
+        horizontalLineTo(42f)
+        roundedRect(12f, 27f, 17f, 39f, 1f)
+        roundedRect(22f, 21f, 27f, 39f, 1f)
+        roundedRect(32f, 14f, 37f, 39f, 1f)
+        moveTo(11f, 22f)
+        lineTo(21f, 17f)
+        lineTo(28f, 19f)
+        lineTo(39f, 8f)
+        moveTo(39f, 8f)
+        lineTo(34f, 9f)
+        moveTo(39f, 8f)
+        lineTo(38f, 13f)
+    }
 }
 
 private val IncomeSalaryIcon = monolineIcon("IncomeSalary") {

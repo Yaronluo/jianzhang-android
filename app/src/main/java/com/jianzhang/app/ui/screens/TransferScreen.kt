@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material.icons.Icons
@@ -31,6 +32,7 @@ import com.jianzhang.app.ui.FinanceUiState
 import com.jianzhang.app.ui.components.AppCard
 import com.jianzhang.app.ui.components.AppDropdownField
 import com.jianzhang.app.ui.components.AppDropdownItem
+import com.jianzhang.app.ui.components.AccountTypeIcon
 import com.jianzhang.app.ui.components.BackTitleBar
 import com.jianzhang.app.util.formatInputMoney
 import com.jianzhang.app.util.formatMoney
@@ -145,15 +147,31 @@ private fun AccountPicker(
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
         AppDropdownField(
             label = label,
-            value = selected?.let { "${it.icon} ${it.name}" } ?: "",
+            value = selected?.name ?: "",
             placeholder = "请选择账户",
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            leadingContent = selected?.let { account ->
+                {
+                    AccountTypeIcon(
+                        type = account.type,
+                        modifier = Modifier.size(22.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         ) { dismiss ->
             accounts.filter { it.id != excludedId }.forEach { account ->
                 AppDropdownItem(
-                    text = "${account.icon} ${account.name}",
+                    text = account.name,
                     supportingText = formatMoney(account.balanceInCents),
                     selected = account.id == selectedId,
+                    leadingContent = {
+                        AccountTypeIcon(
+                            type = account.type,
+                            modifier = Modifier.size(22.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
                     onClick = {
                         onSelected(account.id)
                         dismiss()

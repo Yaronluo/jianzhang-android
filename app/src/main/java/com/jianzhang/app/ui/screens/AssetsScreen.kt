@@ -29,11 +29,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ShowChart
-import androidx.compose.material.icons.outlined.AccountBalance
-import androidx.compose.material.icons.outlined.AccountBalanceWallet
-import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -55,7 +50,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
@@ -67,6 +61,7 @@ import com.jianzhang.app.data.local.entity.AccountType
 import com.jianzhang.app.ui.FinanceUiState
 import com.jianzhang.app.ui.components.AppCard
 import com.jianzhang.app.ui.components.AssetCardRow
+import com.jianzhang.app.ui.components.AccountTypeIcon
 import com.jianzhang.app.ui.components.CollapsingTitleHeader
 import com.jianzhang.app.ui.components.EmptyState
 import com.jianzhang.app.util.formatInputMoney
@@ -104,13 +99,6 @@ private val accountTypeOptions = listOf(
 )
 
 private val AssetEditorAccent = Color(0xFFFFC107)
-
-private fun accountTypeIcon(type: AccountType): ImageVector = when (type) {
-    AccountType.CASH, AccountType.BANK_CARD -> Icons.Outlined.AccountBalance
-    AccountType.ALIPAY, AccountType.WECHAT -> Icons.Outlined.AccountBalanceWallet
-    AccountType.CREDIT_CARD -> Icons.Outlined.CreditCard
-    AccountType.OTHER -> Icons.AutoMirrored.Outlined.ShowChart
-}
 
 @Composable
 fun AssetsScreen(
@@ -488,7 +476,11 @@ private fun AccountEditorDialog(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Icon(accountTypeIcon(option.type), contentDescription = null, modifier = Modifier.size(18.dp))
+                                    AccountTypeIcon(
+                                        type = option.type,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = if (selected) Color(0xFF3A2B00) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                     Text(option.label, style = MaterialTheme.typography.labelLarge)
                                 }
                             }
@@ -507,16 +499,16 @@ private fun AccountEditorDialog(
                             Text("图标", style = MaterialTheme.typography.titleSmall)
                             Spacer(modifier = Modifier.weight(1f))
                             Surface(
-                                modifier = Modifier.size(40.dp),
+                                modifier = Modifier.size(38.dp),
                                 shape = androidx.compose.foundation.shape.CircleShape,
                                 color = MaterialTheme.colorScheme.primaryContainer
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = accountTypeIcon(type),
-                                        contentDescription = "选择图标",
+                                    AccountTypeIcon(
+                                        type = type,
                                         modifier = Modifier.size(22.dp),
-                                        tint = MaterialTheme.colorScheme.primary
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        contentDescription = "选择图标"
                                     )
                                 }
                             }
@@ -540,11 +532,11 @@ private fun AccountEditorDialog(
                                         color = if (option.type == type) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.background
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = accountTypeIcon(option.type),
-                                                contentDescription = option.label,
+                                            AccountTypeIcon(
+                                                type = option.type,
                                                 modifier = Modifier.size(20.dp),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                tint = if (option.type == type) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                contentDescription = option.label
                                             )
                                         }
                                     }

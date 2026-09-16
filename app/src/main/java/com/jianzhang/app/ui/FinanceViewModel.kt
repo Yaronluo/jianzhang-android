@@ -16,6 +16,7 @@ import com.jianzhang.app.data.local.entity.TransactionType
 import com.jianzhang.app.data.preferences.AiConfigStore
 import com.jianzhang.app.data.repository.FinanceRepository
 import com.jianzhang.app.domain.ai.AiReceiptSettings
+import com.jianzhang.app.quickcapture.QuickCaptureTileService
 import com.jianzhang.app.util.parseMoneyToCents
 import com.jianzhang.app.util.parseMoneyToCentsOrZero
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -54,6 +55,16 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     val onboardingVisible: StateFlow<Boolean> = _onboardingVisible
     val themeMode: StateFlow<String> = _themeMode
     val aiSettings: StateFlow<AiReceiptSettings> = _aiSettings
+    private val _navigationRequest = MutableStateFlow<String?>(null)
+    val navigationRequest: StateFlow<String?> = _navigationRequest
+
+    fun requestNavigation(route: String) {
+        _navigationRequest.value = route
+    }
+
+    fun consumeNavigationRequest() {
+        _navigationRequest.value = null
+    }
 
     private val budgetState = combine(repository.budgets, selectedMonth) { budgets, month ->
         budgets to month
@@ -183,6 +194,59 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 .onSuccess { _events.emit("票据账单已保存") }
                 .onFailure { _events.emit(it.message ?: "票据账单保存失败") }
         }
+    }
+
+    fun saveQuickCaptureReceipt(
+        sessionId: String,
+        amountText: String,
+        categoryId: String,
+        accountId: String?,
+        date: String,
+        time: String,
+        merchant: String,
+        paymentMethod: String,
+        note: String
+    ): Boolean {
+        val amount = parseMoneyToCents(amountText)
+        if (amount == null || accountId == null) {
+            _events.tryEmit(if (amount == null) "请核对并填写正确金额" else "请选择记账账户")
+            return false
+        }
+        if (!com.jianzhang.app.quickcapture.QuickCaptureSessionRegistry.tryBeginSaving(sessionId)) return false
+        viewModelScope.launch {
+            runCatching {
+                repository.saveTransaction(
+                    transactionId = "quick-$sessionId",
+                    amountInCents = amount,
+                    type = TransactionType.EXPENSE,
+                    categoryId = categoryId,
+                    accountId = accountId,
+                    date = date,
+                    time = time,
+                    note = listOf(merchant.trim(), note.trim()).filter(String::isNotBlank).joinToString(" · "),
+                    merchant = merchant.trim().ifBlank { null },
+                    paymentMethod = paymentMethod.trim().ifBlank { null },
+                    importSource = "quick_capture"
+                )
+            }.onSuccess {
+                com.jianzhang.app.quickcapture.QuickCaptureSessionRegistry.finish(
+                    sessionId,
+                    com.jianzhang.app.quickcapture.QuickCaptureState.SUCCESS
+                )
+                com.jianzhang.app.quickcapture.QuickCaptureSessionRegistry.reset(sessionId)
+                QuickCaptureTileService.reset(getApplication())
+                _events.emit("一键慧录账单已保存")
+            }.onFailure {
+                com.jianzhang.app.quickcapture.QuickCaptureSessionRegistry.finish(
+                    sessionId,
+                    com.jianzhang.app.quickcapture.QuickCaptureState.FAILED
+                )
+                com.jianzhang.app.quickcapture.QuickCaptureSessionRegistry.reset(sessionId)
+                QuickCaptureTileService.reset(getApplication())
+                _events.emit(it.message ?: "票据账单保存失败")
+            }
+        }
+        return true
     }
 
     fun deleteTransaction(transactionId: String) {

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jianzhang.app.data.local.entity.AccountType
 import com.jianzhang.app.ui.components.AppCard
+import com.jianzhang.app.ui.components.AccountTypeIcon
 
 @Composable
 fun OnboardingScreen(
@@ -61,9 +63,9 @@ fun OnboardingScreen(
         }
         Text("先创建一个常用账户？", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("也可以先跳过，之后在资产页面添加。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        AccountChoice("💵", "现金", "适合记录手头现金", onClick = { onCreateAccount("现金", AccountType.CASH, "💵") })
-        AccountChoice("🟦", "支付宝", "适合日常线上消费", onClick = { onCreateAccount("支付宝", AccountType.ALIPAY, "🟦") })
-        AccountChoice("🏦", "银行卡", "适合记录银行卡余额", onClick = { onCreateAccount("银行卡", AccountType.BANK_CARD, "🏦") })
+        AccountChoice(AccountType.CASH, "现金", "适合记录手头现金", onClick = { onCreateAccount("现金", AccountType.CASH, "💵") })
+        AccountChoice(AccountType.ALIPAY, "支付宝", "适合日常线上消费", onClick = { onCreateAccount("支付宝", AccountType.ALIPAY, "🟦") })
+        AccountChoice(AccountType.BANK_CARD, "银行卡", "适合记录银行卡余额", onClick = { onCreateAccount("银行卡", AccountType.BANK_CARD, "🏦") })
         TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 12.dp)) {
             Text("跳过，稍后设置")
         }
@@ -79,9 +81,14 @@ private fun FeatureLine(icon: androidx.compose.ui.graphics.vector.ImageVector, t
 }
 
 @Composable
-private fun AccountChoice(icon: String, name: String, description: String, onClick: () -> Unit) {
+private fun AccountChoice(type: AccountType, name: String, description: String, onClick: () -> Unit) {
     OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(14.dp)) {
-        Text(icon, style = MaterialTheme.typography.titleLarge)
+        AccountTypeIcon(
+            type = type,
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.primary,
+            contentDescription = name
+        )
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp), horizontalAlignment = Alignment.Start) {
             Text(name, fontWeight = FontWeight.SemiBold)
             Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

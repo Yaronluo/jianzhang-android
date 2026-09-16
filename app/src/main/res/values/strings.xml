@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">简账·慧录</string>
+    <string name="quick_capture_tile_label">截屏记账</string>
+    <string name="quick_capture_accessibility_label">简账·一键慧录</string>
+    <string name="quick_capture_accessibility_description">仅在你点击“截屏记账”后收起控制中心、截取当前页面并显示临时识别卡片；不会持续读取屏幕。</string>
 </resources>

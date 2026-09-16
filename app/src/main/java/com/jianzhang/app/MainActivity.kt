@@ -3,6 +3,7 @@ package com.jianzhang.app
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -26,6 +27,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleNavigationIntent(intent)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
@@ -72,5 +74,28 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNavigationIntent(intent)
+    }
+
+    private fun handleNavigationIntent(intent: Intent?) {
+        when (intent?.action) {
+            ACTION_OPEN_QUICK_CAPTURE_SETTINGS -> viewModel.requestNavigation("settings")
+            ACTION_OPEN_RECEIPT -> viewModel.requestNavigation("receipt")
+            ACTION_EDIT_QUICK_CAPTURE -> intent.getStringExtra(EXTRA_QUICK_SESSION_ID)?.let {
+                viewModel.requestNavigation("receipt-quick/$it")
+            }
+        }
+    }
+
+    companion object {
+        const val ACTION_OPEN_QUICK_CAPTURE_SETTINGS = "com.jianzhang.app.OPEN_QUICK_CAPTURE_SETTINGS"
+        const val ACTION_EDIT_QUICK_CAPTURE = "com.jianzhang.app.EDIT_QUICK_CAPTURE"
+        const val ACTION_OPEN_RECEIPT = "com.jianzhang.app.OPEN_RECEIPT"
+        const val EXTRA_QUICK_SESSION_ID = "quick_session_id"
     }
 }
