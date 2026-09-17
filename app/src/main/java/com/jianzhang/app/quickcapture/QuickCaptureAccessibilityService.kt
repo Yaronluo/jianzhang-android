@@ -120,7 +120,7 @@ class QuickCaptureAccessibilityService : AccessibilityService() {
                 return
             }
             showLoading("正在准备识别……", sessionId)
-            val parsed = try {
+            val analysis = try {
                 QuickCaptureRecognizer(this).recognize(bitmap) { state, text ->
                     QuickCaptureSessionRegistry.transition(sessionId, state)
                     scope.launch { showLoading(text, sessionId) }
@@ -129,15 +129,19 @@ class QuickCaptureAccessibilityService : AccessibilityService() {
                 bitmap.recycle()
             }
             val accounts = AppDatabase.getInstance(this).financeDao().observeAccounts().first()
-            val resolvedAccountId = AccountSelectionPolicy.resolveReceiptAccountId(
-                accounts = accounts,
-                paymentMethod = parsed.paymentMethod,
-                defaultAccountId = QuickCapturePreferences(this).defaultAccountId,
-                recognitionText = parsed.rawText
-            )
+            val expense = analysis.actions.filterIsInstance<ExpenseAction>().firstOrNull()
+            val receipt = expense?.toParsedReceipt()
+            val resolvedAccountId = receipt?.let {
+                AccountSelectionPolicy.resolveReceiptAccountId(
+                    accounts = accounts,
+                    paymentMethod = it.paymentMethod,
+                    defaultAccountId = QuickCapturePreferences(this).defaultAccountId,
+                    recognitionText = analysis.rawText
+                )
+            }
             val draft = QuickCaptureDraft(
                 sessionId = sessionId,
-                receipt = parsed,
+                analysis = analysis,
                 resolvedAccountId = resolvedAccountId,
                 resolvedAccountName = accounts.firstOrNull { it.id == resolvedAccountId }?.name
             )
@@ -192,7 +196,48 @@ class QuickCaptureAccessibilityService : AccessibilityService() {
     }
 
     private fun showResult(draft: QuickCaptureDraft) {
-        val receipt = draft.receipt
+        val actions = draft.analysis.actions
+        if (actions.isEmpty()) {
+            showOverlay(
+                title = "暂时无法理解当前页面",
+                message = "没有生成任何操作。你可以关闭后换一张更清晰、信息更完整的页面重试。",
+                buttons = listOf("关闭" to { cancelSession(draft.sessionId) })
+            )
+            return
+        }
+        if (actions.size > 1) {
+            val lines = actions.joinToString("\n") { actionSummary(it) }
+            val executable = actions.any { it.confidence >= MIN_REVIEW_CONFIDENCE }
+            showOverlay(
+                title = "检测到${actions.size}项信息",
+                message = "${draft.analysis.source}\n$lines",
+                buttons = buildList {
+                    if (draft.expenseAction != null) add("查看修改" to { openEditor(draft.sessionId) })
+                    if (executable) add("全部执行" to { executeActions(draft) })
+                    add("关闭" to { cancelSession(draft.sessionId) })
+                }
+            )
+            return
+        }
+        val only = actions.single()
+        if (only !is ExpenseAction) {
+            val low = only.confidence < MIN_REVIEW_CONFIDENCE
+            val medium = only.confidence < AUTO_READY_CONFIDENCE
+            showOverlay(
+                title = draft.analysis.summary ?: actionTitle(only),
+                message = "${draft.analysis.source}\n${actionSummary(only)}" + when {
+                    low -> "\n可能检测到相关信息，但置信度过低，已禁止执行。"
+                    medium -> "\n置信度一般，请重点核对后再固定。"
+                    else -> ""
+                },
+                buttons = buildList {
+                    add("取消" to { cancelSession(draft.sessionId) })
+                    if (!low) add("固定到通知栏" to { executeActions(draft) })
+                }
+            )
+            return
+        }
+        val receipt = only.toParsedReceipt()
         val amount = receipt.amountInCents?.let { String.format(Locale.CHINA, "¥%.2f", it / 100.0) } ?: "金额待核对"
         val confidenceHint = if (
             receipt.amountConfidence != ReceiptFieldConfidence.HIGH ||
@@ -213,6 +258,62 @@ class QuickCaptureAccessibilityService : AccessibilityService() {
                 "关闭" to { cancelSession(draft.sessionId) }
             )
         )
+    }
+
+    private fun actionTitle(action: ScreenAction): String = when (action) {
+        is ExpenseAction -> action.merchant ?: "消费记录"
+        is PickupAction -> action.merchant ?: "取餐信息"
+        is PackageAction -> action.company ?: "取件信息"
+        is TravelAction -> action.number ?: "出行信息"
+    }
+
+    private fun actionSummary(action: ScreenAction): String {
+        val prefix = when {
+            action.confidence < MIN_REVIEW_CONFIDENCE -> "可能 · "
+            action.confidence < AUTO_READY_CONFIDENCE -> "需核对 · "
+            else -> ""
+        }
+        return prefix + when (action) {
+            is ExpenseAction -> "消费 ${action.amount?.let { "¥$it" } ?: "金额待核对"} ${action.merchant.orEmpty()}".trim()
+            is PickupAction -> "取餐码 ${action.code ?: "待核对"} ${action.merchant.orEmpty()}".trim()
+            is PackageAction -> "取件码 ${action.code ?: "待核对"} ${action.company.orEmpty()}".trim()
+            is TravelAction -> listOfNotNull(action.number, action.from?.let { from -> action.to?.let { "$from → $it" } }).joinToString(" · ").ifBlank { "出行信息待核对" }
+        }
+    }
+
+    private fun executeActions(draft: QuickCaptureDraft) {
+        val expenseCanDirectSave = draft.expenseAction?.let { QuickCaptureEligibility.canDirectSave(draft) } == true
+        val canFinishImmediately = draft.expenseAction == null || expenseCanDirectSave
+        if (canFinishImmediately && !QuickCaptureSessionRegistry.tryBeginSaving(draft.sessionId)) return
+        showLoading("正在执行已确认操作……", draft.sessionId)
+        scope.launch {
+            runCatching { ActionRouter(this@QuickCaptureAccessibilityService).executeConfirmed(draft) }
+                .onSuccess { result ->
+                    if (result.expenseNeedsReview) {
+                        if (result.notificationPermissionMissing) {
+                            android.widget.Toast.makeText(
+                                this@QuickCaptureAccessibilityService,
+                                "通知权限未开启，事项已保留在应用内",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        openEditor(draft.sessionId)
+                        return@onSuccess
+                    }
+                    QuickCaptureSessionRegistry.finish(draft.sessionId, QuickCaptureState.SUCCESS)
+                    val message = buildString {
+                        append("已执行 ${result.executed} 项")
+                        if (result.duplicateOrSkipped > 0) append("，跳过 ${result.duplicateOrSkipped} 项重复或低置信结果")
+                        if (result.notificationPermissionMissing) append("\n通知权限未开启，事项已保留在应用内")
+                    }
+                    showOverlay("✓ 操作完成", message, success = true)
+                    delay(1_800)
+                    removeOverlay()
+                    QuickCaptureSessionRegistry.reset(draft.sessionId)
+                    QuickCaptureTileService.reset(this@QuickCaptureAccessibilityService)
+                }
+                .onFailure { fail(draft.sessionId, it.message ?: "操作失败") }
+        }
     }
 
     private fun saveFromOverlay(draft: QuickCaptureDraft) {
@@ -255,7 +356,7 @@ class QuickCaptureAccessibilityService : AccessibilityService() {
 
     private fun showLoading(message: String, sessionId: String) {
         showOverlay(
-            title = "简账·慧录",
+            title = "简记·慧屏",
             message = message,
             progress = true,
             buttons = listOf("取消" to { cancelSession(sessionId) })
@@ -290,6 +391,8 @@ class QuickCaptureAccessibilityService : AccessibilityService() {
     private fun cancelActive() {
         captureJob?.cancel()
         removeOverlay()
+        QuickCaptureSessionRegistry.resetAll()
+        QuickCaptureTileService.reset(this)
     }
 
     private fun showOverlay(
@@ -368,7 +471,9 @@ class QuickCaptureAccessibilityService : AccessibilityService() {
     }
 
     companion object {
-        private const val SESSION_TIMEOUT_MILLIS = 90_000L
+        private const val SESSION_TIMEOUT_MILLIS = 120_000L
+        private const val AUTO_READY_CONFIDENCE = 0.85
+        private const val MIN_REVIEW_CONFIDENCE = 0.65
         @Volatile var connectedInstance: QuickCaptureAccessibilityService? = null
             private set
 

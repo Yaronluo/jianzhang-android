@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,19 +44,20 @@ fun OnboardingScreen(
             .padding(horizontal = 24.dp, vertical = 30.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Text("简账·慧录", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+        Text("简记·慧屏", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
         Text(
-            "把每一笔钱都变成看得懂的选择",
+            "AI截图行动助手",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         AppCard {
             Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("从记下第一笔钱开始", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("一张截图，让信息直接变成行动", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(
-                    "拍小票或导入消费截图，核对后就能记账；账单、账户、预算和统计仍在一起。核心数据保存在本机。",
+                    "点击控制中心的“AI截图助手”，系统会在你确认后记账、固定取餐码和取件码，或生成出行卡片。",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                FeatureLine(Icons.Default.AutoAwesome, "一张截图可以同时识别多个用途")
                 FeatureLine(Icons.Default.AccountBalanceWallet, "账单和资产余额自动联动")
                 FeatureLine(Icons.Default.CalendarMonth, "固定支出到期提醒，不再漏记")
                 FeatureLine(Icons.Default.Analytics, "预算、趋势和财务洞察一目了然")

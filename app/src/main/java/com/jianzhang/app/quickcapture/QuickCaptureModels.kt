@@ -22,10 +22,50 @@ enum class QuickCaptureState {
 
 data class QuickCaptureDraft(
     val sessionId: String,
-    val receipt: ParsedReceipt,
+    val analysis: ScreenAnalysis,
     val resolvedAccountId: String?,
-    val resolvedAccountName: String? = null
-)
+    val resolvedAccountName: String? = null,
+    private val receiptSnapshot: ParsedReceipt? = null
+) {
+    constructor(
+        sessionId: String,
+        receipt: ParsedReceipt,
+        resolvedAccountId: String?,
+        resolvedAccountName: String? = null
+    ) : this(
+        sessionId = sessionId,
+        analysis = ScreenAnalysis(
+            summary = "识别到消费信息",
+            actions = listOf(
+                ExpenseAction(
+                    confidence = if (
+                        receipt.amountConfidence == ReceiptFieldConfidence.HIGH &&
+                        receipt.dateConfidence == ReceiptFieldConfidence.HIGH
+                    ) 0.9 else 0.7,
+                    amount = receipt.amountInCents?.let { "%.2f".format(it / 100.0) },
+                    merchant = receipt.merchant,
+                    category = null,
+                    date = receipt.date,
+                    time = receipt.time,
+                    paymentMethod = receipt.paymentMethod,
+                    rawText = receipt.rawText,
+                    source = receipt.recognitionSource
+                )
+            ),
+            source = receipt.recognitionSource,
+            rawText = receipt.rawText
+        ),
+        resolvedAccountId = resolvedAccountId,
+        resolvedAccountName = resolvedAccountName,
+        receiptSnapshot = receipt
+    )
+
+    val expenseAction: ExpenseAction?
+        get() = analysis.actions.filterIsInstance<ExpenseAction>().firstOrNull()
+
+    val receipt: ParsedReceipt
+        get() = receiptSnapshot ?: requireNotNull(expenseAction) { "当前识别结果不包含账单" }.toParsedReceipt()
+}
 
 /** Process-local state shared by the tile, accessibility service and confirmation activity. */
 object QuickCaptureSessionRegistry {
@@ -111,6 +151,8 @@ object QuickCaptureSessionRegistry {
 
 object QuickCaptureEligibility {
     fun canDirectSave(draft: QuickCaptureDraft): Boolean {
+        val action = draft.expenseAction ?: return false
+        if (action.confidence < 0.85) return false
         val receipt = draft.receipt
         return receipt.amountInCents?.let { it > 0 } == true &&
             runCatching { LocalDate.parse(receipt.date) }.isSuccess &&

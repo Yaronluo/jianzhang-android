@@ -25,7 +25,7 @@ class QuickCaptureTileService : TileService() {
     override fun onClick() {
         super.onClick()
         if (QuickCaptureSessionRegistry.currentState() !in terminalStates) {
-            Toast.makeText(this, "正在处理上一张账单", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "正在处理上一张截图", Toast.LENGTH_SHORT).show()
             return
         }
         val service = QuickCaptureAccessibilityService.connectedInstance
@@ -93,7 +93,7 @@ class QuickCaptureTileService : TileService() {
     }
 
     companion object {
-        const val DEFAULT_TEXT = "截屏记账"
+        const val DEFAULT_TEXT = "AI截图助手"
         private const val PREFS = "quick_capture_tile"
         private const val KEY_TEXT = "tile_text"
         private val terminalStates = setOf(

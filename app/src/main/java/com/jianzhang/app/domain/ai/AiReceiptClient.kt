@@ -35,6 +35,32 @@ object AiReceiptClient {
         request(config, receiptMessages(ocrText = ocrText))
     }
 
+    /** Screen-understanding endpoint used only by the control-center assistant. */
+    suspend fun analyzeScreenImage(context: Context, uri: Uri, config: AiReceiptConfig): String = withContext(Dispatchers.IO) {
+        requireCloudConfig(config)
+        val bytes = encodeJpeg(context, uri)
+        require(bytes.size <= MAX_IMAGE_BYTES) { "图片超过 20 MB，请压缩后重试" }
+        val dataUrl = "data:image/jpeg;base64,${Base64.encodeToString(bytes, Base64.NO_WRAP)}"
+        request(
+            config,
+            screenMessages(imageDataUrl = dataUrl),
+            maxTokens = 1_800,
+            totalTimeoutMillis = SCREEN_REQUEST_TIMEOUT_MILLIS
+        )
+    }
+
+    /** OCR-first screen-understanding endpoint; it reuses the same provider and HTTP stack. */
+    suspend fun analyzeScreenText(config: AiReceiptConfig, ocrText: String): String = withContext(Dispatchers.IO) {
+        requireCloudConfig(config)
+        require(ocrText.isNotBlank()) { "本地 OCR 没有识别到文字" }
+        request(
+            config,
+            screenMessages(ocrText = ocrText),
+            maxTokens = 1_800,
+            totalTimeoutMillis = SCREEN_REQUEST_TIMEOUT_MILLIS
+        )
+    }
+
     suspend fun testConnection(config: AiReceiptConfig): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             requireCloudConfig(config.copy(enabled = true))
@@ -72,7 +98,8 @@ object AiReceiptClient {
         config: AiReceiptConfig,
         messages: JSONArray,
         maxTokens: Int = 900,
-        requestJson: Boolean = true
+        requestJson: Boolean = true,
+        totalTimeoutMillis: Long? = null
     ): String {
         val body = JSONObject()
             .put("model", config.model.trim())
@@ -80,17 +107,29 @@ object AiReceiptClient {
             .put("temperature", 0)
             .put("max_tokens", maxTokens)
         if (requestJson) body.put("response_format", JSONObject().put("type", "json_object"))
+        val deadlineNanos = totalTimeoutMillis?.let { System.nanoTime() + it * 1_000_000L }
+        fun executeWithinDeadline(): JSONObject {
+            val remainingMillis = deadlineNanos?.let { deadline ->
+                ((deadline - System.nanoTime()) / 1_000_000L)
+                    .coerceAtMost(Int.MAX_VALUE.toLong())
+                    .toInt()
+            }
+            if (remainingMillis != null && remainingMillis <= 0) {
+                throw SocketTimeoutException("AI request deadline exceeded")
+            }
+            return execute(config, body, remainingMillis)
+        }
         val response = try {
-            execute(config, body)
+            executeWithinDeadline()
         } catch (error: AiHttpException) {
             if (requestJson && error.code in setOf(400, 422)) {
                 body.remove("response_format")
                 try {
-                    execute(config, body)
+                    executeWithinDeadline()
                 } catch (retryError: AiHttpException) {
                     if (retryError.code in setOf(400, 422)) {
                         body.remove("temperature")
-                        execute(config, body)
+                        executeWithinDeadline()
                     } else {
                         throw retryError
                     }
@@ -102,12 +141,12 @@ object AiReceiptClient {
         return extractContent(response)
     }
 
-    private fun execute(config: AiReceiptConfig, body: JSONObject): JSONObject {
+    private fun execute(config: AiReceiptConfig, body: JSONObject, remainingMillis: Int? = null): JSONObject {
         val connection = URL(completionUrl(config.baseUrl)).openConnection() as HttpURLConnection
         return try {
             connection.requestMethod = "POST"
-            connection.connectTimeout = 20_000
-            connection.readTimeout = 75_000
+            connection.connectTimeout = remainingMillis?.coerceAtMost(20_000) ?: 20_000
+            connection.readTimeout = remainingMillis?.coerceAtMost(75_000) ?: 75_000
             connection.doOutput = true
             connection.setRequestProperty("Authorization", "Bearer ${config.apiKey.trim()}")
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -173,6 +212,31 @@ object AiReceiptClient {
                     JSONObject().put("url", imageDataUrl)
                 )
             )
+        } else {
+            content.put(JSONObject().put("type", "text").put("text", "本地 OCR 原文：\n${ocrText.orEmpty()}"))
+        }
+        return JSONArray().put(JSONObject().put("role", "user").put("content", content))
+    }
+
+    private fun screenMessages(imageDataUrl: String? = null, ocrText: String? = null): JSONArray {
+        val prompt = """
+            你是“简记·慧屏”的屏幕理解器。只根据用户主动提供的这一张截图提取可立即执行的信息。
+            一张截图可以同时产生多个动作。返回且只返回一个 JSON 对象：
+            {"schemaVersion":1,"summary":string|null,"rawText":string|null,"actions":[...]}
+            actions 允许的 type 仅为 expense、pickup、package、travel；每个元素必须含 type、0到1之间的 confidence 和 data。
+            expense.data 字段：amount, merchant, category, date, time, paymentMethod。
+            pickup.data 字段：merchant, code, queueNumber, tableNumber, location, time。
+            package.data 字段：company, code, location, shelf, deadline。
+            travel.data 字段：travelType, number, from, to, date, departureTime, arrivalTime, terminal, gate, carriage, seat, boardingTime。
+            travelType 只能是 train、flight、bus、ship、other。
+            金额必须是最终实付金额，不含货币符号；日期使用 YYYY-MM-DD，时间使用 HH:mm。
+            所有字段只能来自截图。看不到或无法可靠确定的字段必须返回 null，严禁补全、推测或使用常识猜测。
+            同一订单若同时包含消费和取餐码，应同时返回 expense 与 pickup；车票若同时包含票价与行程，应同时返回 expense 与 travel。
+            不要把订单号、手机号、优惠金额或原价当作金额或取件码。无法可靠识别时 actions 返回空数组。
+        """.trimIndent()
+        val content = JSONArray().put(JSONObject().put("type", "text").put("text", prompt))
+        if (imageDataUrl != null) {
+            content.put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", imageDataUrl)))
         } else {
             content.put(JSONObject().put("type", "text").put("text", "本地 OCR 原文：\n${ocrText.orEmpty()}"))
         }
@@ -266,4 +330,5 @@ object AiReceiptClient {
 
     private const val MAX_IMAGE_BYTES = 20 * 1024 * 1024
     private const val MAX_IMAGE_DIMENSION = 2560
+    private const val SCREEN_REQUEST_TIMEOUT_MILLIS = 55_000L
 }

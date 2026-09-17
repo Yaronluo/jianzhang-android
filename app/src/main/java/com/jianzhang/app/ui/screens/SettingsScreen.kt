@@ -101,6 +101,7 @@ fun SettingsScreen(
         }
     }
     val accessibilityEnabled = remember(accessibilityRefresh) { QuickCaptureAccessibilityService.isEnabled(context) }
+    val accessibilityConnected = remember(accessibilityRefresh) { QuickCaptureAccessibilityService.connectedInstance != null }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) accessibilityRefresh++
@@ -111,8 +112,8 @@ fun SettingsScreen(
     if (showAbout) {
         AlertDialog(
             onDismissRequest = { showAbout = false },
-            title = { Text("关于简账·慧录") },
-            text = { Text("简账·慧录支持本地票据识别，也允许用户配置自己的 AI 服务。\n\n只有启用云端 AI 后，用户主动选择的图片或 OCR 文字才会发送到所配置的服务商；应用不读取微信、支付宝账户，所有结果均需核对后入账。") },
+            title = { Text("关于简记·慧屏") },
+            text = { Text("简记·慧屏是一款面向大学生日常生活的跨应用 AI 截图助手。它可以从用户主动截取的页面中识别消费、取餐、取件和出行信息，并在确认后执行。\n\n只有启用云端 AI 后，截图或 OCR 文字才会发送到用户配置的服务商；本地 OCR 模式不调用云端。应用不读取微信、支付宝账户，也不会在后台监听屏幕。") },
             confirmButton = { TextButton(onClick = { showAbout = false }) { Text("知道了") } }
         )
     }
@@ -186,9 +187,9 @@ fun SettingsScreen(
                             modifier = Modifier.padding(start = 16.dp),
                             verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
-                            Text("简账·慧录", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text("简记·慧屏", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                             Text(
-                                "让每一笔收支，都清楚又安心",
+                                "AI截图行动助手",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -244,14 +245,18 @@ fun SettingsScreen(
                 }
             }
             item {
-                SettingsSectionTitle("一键慧录")
+                SettingsSectionTitle("AI截图助手")
                 AppCard(modifier = Modifier.padding(top = 10.dp)) {
                     Column {
                         SettingsActionRow(
                             icon = Icons.Default.TouchApp,
                             title = "无障碍截屏服务",
-                            subtitle = if (accessibilityEnabled) "已开启 · 仅点击磁贴时截屏" else "未开启 · 需要允许截屏与临时卡片",
-                            actionLabel = if (accessibilityEnabled) "已开启" else "开启",
+                            subtitle = when {
+                                accessibilityConnected -> "已连接 · 仅点击磁贴时截屏"
+                                accessibilityEnabled -> "已授权 · 等待系统连接（可关闭后重新开启）"
+                                else -> "未开启 · 需要允许截屏与临时卡片"
+                            },
+                            actionLabel = if (accessibilityConnected) "已连接" else "开启",
                             onClick = {
                                 context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                             }
@@ -285,14 +290,14 @@ fun SettingsScreen(
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                         context.getSystemService(StatusBarManager::class.java).requestAddTileService(
                                             ComponentName(context, QuickCaptureTileService::class.java),
-                                            "截屏记账",
+                                            "AI截图助手",
                                             android.graphics.drawable.Icon.createWithResource(context, com.jianzhang.app.R.drawable.ic_quick_capture_tile),
                                             context.mainExecutor
                                         ) { result ->
                                             Toast.makeText(context, if (result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED) "已添加到控制中心" else "请在控制中心编辑页手动添加", Toast.LENGTH_LONG).show()
                                         }
                                     } else {
-                                        Toast.makeText(context, "请下拉控制中心，点击编辑并添加“截屏记账”", Toast.LENGTH_LONG).show()
+                                        Toast.makeText(context, "请下拉控制中心，点击编辑并添加“AI截图助手”", Toast.LENGTH_LONG).show()
                                     }
                                 },
                                 modifier = Modifier.weight(1f)
@@ -301,7 +306,7 @@ fun SettingsScreen(
                                 onClick = {
                                     val service = QuickCaptureAccessibilityService.connectedInstance
                                     if (service != null) service.showTestCard()
-                                    else Toast.makeText(context, "请先开启无障碍截屏服务", Toast.LENGTH_SHORT).show()
+                                    else Toast.makeText(context, "服务已授权但尚未连接时，请关闭后重新开启无障碍服务", Toast.LENGTH_LONG).show()
                                 },
                                 modifier = Modifier.weight(1f)
                             ) { Text("测试识别卡片") }
@@ -365,7 +370,7 @@ fun SettingsScreen(
                 AppCard(modifier = Modifier.padding(top = 10.dp, bottom = 20.dp)) {
                     SettingsActionRow(
                         icon = Icons.Default.Info,
-                        title = "关于简账·慧录",
+                        title = "关于简记·慧屏",
                         subtitle = "版本 1.0 · 本地识别与自定义 AI",
                         actionLabel = "查看",
                         onClick = { showAbout = true }

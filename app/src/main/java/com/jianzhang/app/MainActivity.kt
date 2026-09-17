@@ -4,11 +4,14 @@ import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -21,12 +24,23 @@ import com.jianzhang.app.ui.FinanceViewModel
 import com.jianzhang.app.ui.navigation.JianzhangApp
 import com.jianzhang.app.ui.screens.OnboardingScreen
 import com.jianzhang.app.ui.theme.JianzhangTheme
+import com.jianzhang.app.quickcapture.SmartNotificationManager
 
 class MainActivity : ComponentActivity() {
     private val viewModel: FinanceViewModel by viewModels()
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) SmartNotificationManager(this).restoreAll()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            SmartNotificationManager(this).restoreAll()
+        }
         handleNavigationIntent(intent)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),

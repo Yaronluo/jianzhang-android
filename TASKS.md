@@ -24,10 +24,12 @@
 - 已完成测试：`testDebugUnitTest`、`lintDebug`（0 errors）、`assembleDebug`、`assembleDebugAndroidTest`、`assembleRelease`。
 - 已完成无线 ADB 真机验收：设备 `10.0.40.110:40461` 安装并启动成功；手工验证导航、增删改账单、余额联动、转账、余额调整、固定支出确认、统计和分类预算。
 - 已完成真机 Instrumentation 回归：8 项全部通过，覆盖账单编辑/删除、启动器注册、转账、转入账户历史保护、透支账户编辑、固定支出防重复、演示数据清除余额一致性，以及跨月预算读取与移除。
+- 已完成“简记·慧屏”统一截图入口：控制中心磁贴、无障碍截图、`actions[]` 多动作协议、AI/AI+OCR/OCR 三模式、云端失败回退、本地保守场景解析和重复会话保护。
+- 已完成取餐、取件与火车/航班当前事项：轻量本地存储、多通知共存、独立完成按钮、指纹去重、通知权限降级和首页“当前事项”。
 
 ## 正在进行
 
-- 无。当前竞赛版功能和验收已完成。
+- Xiaomi 15 Pro 完整真机回归与比赛演示材料整理。
 
 ## 待完成
 
@@ -39,6 +41,8 @@
 - Windows 中文路径会触发 Android/Kotlin 工具链的路径兼容问题；请使用 `J:` 映射后的 ASCII 路径构建，并将 SDK 映射到 `K:`，详见 README。
 - 当前 `lintDebug` 为 0 errors、28 warnings，主要是目标 SDK/依赖更新提示、Kapt 和版本目录建议，不阻塞构建。
 - ADB 列表同时显示 IP serial 和 mDNS serial；测试使用明确 serial `10.0.40.110:40461`，若手机重启或端口变化应以手机无线调试页为准。
+- HyperOS 在覆盖安装 APK 后可能清除无障碍授权，更新后需在系统设置中重新确认“简记·AI截图助手”。
+- 部分 Xiaomi 系统策略会阻止通过 ADB 安装 AndroidTest APK；这不影响 Debug APK 构建与手工真机验收，但不能把“AndroidTest APK 已构建”写成“Instrumentation 已执行”。
 
 ## 下一步
 

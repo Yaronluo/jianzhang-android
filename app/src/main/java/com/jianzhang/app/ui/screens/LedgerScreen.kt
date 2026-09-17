@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -45,6 +47,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +61,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -71,6 +75,9 @@ import com.jianzhang.app.ui.components.AppCard
 import com.jianzhang.app.ui.components.CollapsingTitleHeader
 import com.jianzhang.app.ui.components.EmptyState
 import com.jianzhang.app.ui.components.TransactionRow
+import com.jianzhang.app.quickcapture.SmartCardStore
+import com.jianzhang.app.quickcapture.SmartCardType
+import com.jianzhang.app.quickcapture.SmartNotificationManager
 import com.jianzhang.app.util.formatDate
 import com.jianzhang.app.util.formatMoney
 import com.jianzhang.app.util.formatMonth
@@ -90,6 +97,10 @@ fun LedgerScreen(
     onCreateAccount: (String, AccountType, String) -> Unit,
     onGenerateDemo: () -> Unit
 ) {
+    val context = LocalContext.current
+    val smartCardStore = remember(context) { SmartCardStore(context) }
+    val smartCards by remember(smartCardStore) { smartCardStore.observeActiveCards() }
+        .collectAsState(initial = smartCardStore.activeCards())
     var searchText by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf("全部") }
     var openSwipeTransactionId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -266,6 +277,29 @@ fun LedgerScreen(
                 MonthNavigationButton(symbol = "›", description = "下个月", onClick = onMonthNext)
             }
         }
+        item(key = "screen-assistant-entry") {
+            Surface(
+                onClick = onOpenSettings,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shadowElevation = 5.dp
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 17.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(34.dp))
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("AI截图行动助手", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("一张截图，记账、取码或生成出行卡片", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Text("设置 ›", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
         item(key = "quick-receipt-entry") {
             Surface(
                 onClick = onOpenQuickEntry,
@@ -286,10 +320,49 @@ fun LedgerScreen(
                 ) {
                     Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(34.dp))
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("简易记账", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("拍小票或导入截图，核对后记账", style = MaterialTheme.typography.bodyMedium)
+                        Text("票据记账", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("拍小票或从相册导入，保留原有核对流程", style = MaterialTheme.typography.bodyMedium)
                     }
                     Text("开始 ›", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        if (smartCards.isNotEmpty()) {
+            item(key = "smart-card-title") {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Text("当前事项", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+            }
+            items(smartCards.size, key = { index -> smartCards[index].id }) { index ->
+                val card = smartCards[index]
+                AppCard {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(card.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(card.content, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        TextButton(onClick = {
+                            smartCardStore.complete(card.id)
+                            SmartNotificationManager(context).cancel(card.id)
+                        }) {
+                            Text(
+                                when (card.type) {
+                                    SmartCardType.PICKUP -> "已取餐"
+                                    SmartCardType.PACKAGE -> "已取件"
+                                    SmartCardType.TRAVEL -> "结束"
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }

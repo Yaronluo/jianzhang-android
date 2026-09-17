@@ -7,15 +7,14 @@ import com.jianzhang.app.data.preferences.AiConfigStore
 import com.jianzhang.app.domain.ai.AiReceiptClient
 import com.jianzhang.app.domain.ai.AiRecognitionMode
 import com.jianzhang.app.domain.ocr.LocalReceiptOcr
-import com.jianzhang.app.domain.parser.ParsedReceipt
-import com.jianzhang.app.domain.parser.ReceiptParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.util.UUID
 
 class QuickCaptureRecognizer(private val context: Context) {
-    suspend fun recognize(bitmap: Bitmap, onState: (QuickCaptureState, String) -> Unit): ParsedReceipt {
+    suspend fun recognize(bitmap: Bitmap, onState: (QuickCaptureState, String) -> Unit): ScreenAnalysis {
         val directory = File(context.cacheDir, "receipts").apply { mkdirs() }
         val file = File(directory, "quick_${UUID.randomUUID()}.jpg")
         try {
@@ -32,12 +31,14 @@ class QuickCaptureRecognizer(private val context: Context) {
                     if (config == null) {
                         localFallback(uri, null, onState, "AI 未配置，已回退OCR")
                     } else {
-                        onState(QuickCaptureState.RECOGNIZING_AI, "AI正在识别账单……")
+                        onState(QuickCaptureState.RECOGNIZING_AI, "AI正在理解当前页面……")
                         runCatching {
-                            ReceiptParser.parseAiResponse(
-                                AiReceiptClient.recognizeImage(context, uri, config),
-                                "AI识别"
-                            )
+                            withTimeout(AI_ATTEMPT_TIMEOUT_MILLIS) {
+                                ScreenAnalysisParser.parseAiResponse(
+                                    AiReceiptClient.analyzeScreenImage(context, uri, config),
+                                    "AI屏幕识别"
+                                )
+                            }
                         }.getOrElse { localFallback(uri, null, onState, "AI失败，已回退OCR") }
                     }
                 }
@@ -49,12 +50,14 @@ class QuickCaptureRecognizer(private val context: Context) {
                     if (config == null) {
                         localFallback(uri, text, onState, "AI 未配置，已回退OCR")
                     } else {
-                        onState(QuickCaptureState.RECOGNIZING_AI, "AI正在分析账单……")
+                        onState(QuickCaptureState.RECOGNIZING_AI, "AI正在分析页面文字……")
                         runCatching {
-                            ReceiptParser.parseAiResponse(
-                                AiReceiptClient.analyzeOcrText(config, text),
-                                "AI+OCR识别"
-                            ).copy(rawText = text)
+                            withTimeout(AI_ATTEMPT_TIMEOUT_MILLIS) {
+                                ScreenAnalysisParser.parseAiResponse(
+                                    AiReceiptClient.analyzeScreenText(config, text),
+                                    "AI+OCR屏幕识别"
+                                ).copy(rawText = text)
+                            }
                         }.getOrElse { localFallback(uri, text, onState, "AI失败，已回退OCR") }
                     }
                 }
@@ -70,16 +73,16 @@ class QuickCaptureRecognizer(private val context: Context) {
         knownText: String?,
         onState: (QuickCaptureState, String) -> Unit,
         source: String
-    ): ParsedReceipt {
+    ): ScreenAnalysis {
         onState(QuickCaptureState.RECOGNIZING_OCR, "OCR正在识别……")
         val text = knownText ?: LocalReceiptOcr.recognize(context, uri)
         require(text.isNotBlank()) { "没有识别到有效文字" }
-        onState(QuickCaptureState.PARSING, "正在整理账单……")
-        return ReceiptParser.parse(text).copy(
-            recognitionSource = source,
-            warnings = if (source.contains("回退")) {
-                listOf("AI 暂不可用，已使用本地 OCR 结果，请重点核对") + ReceiptParser.parse(text).warnings
-            } else ReceiptParser.parse(text).warnings
-        )
+        onState(QuickCaptureState.PARSING, "正在判断页面用途……")
+        return LocalSceneParser.parse(text, source)
+    }
+
+    private companion object {
+        // 为本地 OCR 回退预留足够时间，避免云端重试占满整个截图会话。
+        const val AI_ATTEMPT_TIMEOUT_MILLIS = 70_000L
     }
 }

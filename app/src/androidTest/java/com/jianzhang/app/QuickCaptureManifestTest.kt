@@ -9,6 +9,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.jianzhang.app.quickcapture.QuickCaptureAccessibilityService
 import com.jianzhang.app.quickcapture.QuickCaptureCollapseActivity
 import com.jianzhang.app.quickcapture.QuickCaptureTileService
+import com.jianzhang.app.quickcapture.TemporaryInfoActionReceiver
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -48,5 +49,19 @@ class QuickCaptureManifestTest {
         assertFalse(info.exported)
         assertEquals(ActivityInfo.FLAG_NO_HISTORY, info.flags and ActivityInfo.FLAG_NO_HISTORY)
         assertEquals(ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS, info.flags and ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS)
+    }
+
+    @Test
+    fun notificationPermissionAndPrivateCompletionReceiver_areDeclared() {
+        val requestedPermissions = context.packageManager.getPackageInfo(
+            context.packageName,
+            PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong())
+        ).requestedPermissions.orEmpty()
+        assertTrue(requestedPermissions.contains(Manifest.permission.POST_NOTIFICATIONS))
+        val receiver = context.packageManager.getReceiverInfo(
+            ComponentName(context, TemporaryInfoActionReceiver::class.java),
+            PackageManager.ComponentInfoFlags.of(0)
+        )
+        assertFalse(receiver.exported)
     }
 }

@@ -235,7 +235,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 )
                 com.jianzhang.app.quickcapture.QuickCaptureSessionRegistry.reset(sessionId)
                 QuickCaptureTileService.reset(getApplication())
-                _events.emit("一键慧录账单已保存")
+                _events.emit("AI截图账单已保存")
             }.onFailure {
                 com.jianzhang.app.quickcapture.QuickCaptureSessionRegistry.finish(
                     sessionId,
