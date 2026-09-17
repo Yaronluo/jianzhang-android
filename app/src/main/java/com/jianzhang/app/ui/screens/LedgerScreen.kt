@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -64,6 +66,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.jianzhang.app.data.local.entity.AccountType
@@ -76,7 +79,6 @@ import com.jianzhang.app.ui.components.EmptyState
 import com.jianzhang.app.ui.components.TransactionRow
 import com.jianzhang.app.quickcapture.SmartCardStore
 import com.jianzhang.app.quickcapture.SmartCardType
-import com.jianzhang.app.quickcapture.SmartNotificationManager
 import com.jianzhang.app.util.formatDate
 import com.jianzhang.app.util.formatMoney
 import com.jianzhang.app.util.formatMonth
@@ -92,6 +94,7 @@ fun LedgerScreen(
     onOpenSettings: () -> Unit,
     onEdit: (TransactionEntity) -> Unit,
     onDelete: (String) -> Unit,
+    onOpenSmartItems: (String?) -> Unit,
     onCreateAccount: (String, AccountType, String) -> Unit,
     onGenerateDemo: () -> Unit
 ) {
@@ -276,42 +279,11 @@ fun LedgerScreen(
             }
         }
         if (smartCards.isNotEmpty()) {
-            item(key = "smart-card-title") {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Text("当前事项", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                }
-            }
-            items(smartCards.size, key = { index -> smartCards[index].id }) { index ->
-                val card = smartCards[index]
-                AppCard {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(card.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text(card.content, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        TextButton(onClick = {
-                            smartCardStore.complete(card.id)
-                            SmartNotificationManager(context).cancel(card.id)
-                        }) {
-                            Text(
-                                when (card.type) {
-                                    SmartCardType.PICKUP -> "已取餐"
-                                    SmartCardType.PACKAGE -> "已取件"
-                                    SmartCardType.TRAVEL -> "结束"
-                                }
-                            )
-                        }
-                    }
-                }
+            item(key = "smart-items-preview") {
+                SmartItemsPreview(
+                    cards = smartCards,
+                    onOpenItems = onOpenSmartItems
+                )
             }
         }
         item(key = "monthly-overview") {
@@ -437,6 +409,92 @@ fun LedgerScreen(
             }
         )
     }
+}
+
+@Composable
+private fun SmartItemsPreview(
+    cards: List<com.jianzhang.app.quickcapture.SmartCard>,
+    onOpenItems: (String?) -> Unit
+) {
+    AppCard {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(19.dp))
+                    Text("当前事项", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${cards.size}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                TextButton(onClick = { onOpenItems(null) }) { Text("查看全部") }
+            }
+            cards.take(2).forEach { card ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenItems(card.id) }
+                        .padding(vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        smartCardTypeLabel(card.type),
+                        modifier = Modifier.width(42.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            card.title,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            card.content.replace("\n", " · "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Text(
+                        smartCardCompletionLabel(card.type),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            if (cards.size > 2) {
+                TextButton(
+                    onClick = { onOpenItems(null) },
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("还有 ${cards.size - 2} 项")
+                }
+            }
+        }
+    }
+}
+
+private fun smartCardTypeLabel(type: SmartCardType): String = when (type) {
+    SmartCardType.PICKUP -> "取餐"
+    SmartCardType.PACKAGE -> "取件"
+    SmartCardType.TRAVEL -> "出行"
+}
+
+private fun smartCardCompletionLabel(type: SmartCardType): String = when (type) {
+    SmartCardType.PICKUP -> "完成"
+    SmartCardType.PACKAGE -> "完成"
+    SmartCardType.TRAVEL -> "结束"
 }
 
 @Composable

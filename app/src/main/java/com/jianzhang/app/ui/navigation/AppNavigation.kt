@@ -65,6 +65,7 @@ import com.jianzhang.app.ui.screens.LedgerScreen
 import com.jianzhang.app.ui.screens.RecurringScreen
 import com.jianzhang.app.ui.screens.ReceiptEntryScreen
 import com.jianzhang.app.ui.screens.SettingsScreen
+import com.jianzhang.app.ui.screens.SmartItemsScreen
 import com.jianzhang.app.ui.screens.StatisticsScreen
 import com.jianzhang.app.ui.screens.TransferScreen
 import com.jianzhang.app.quickcapture.QuickCaptureSessionRegistry
@@ -141,6 +142,9 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                             }
                         },
                         onDelete = viewModel::deleteTransaction,
+                        onOpenSmartItems = { cardId ->
+                            navController.navigate(cardId?.let { "smart-items?selectedId=$it" } ?: "smart-items")
+                        },
                         onCreateAccount = viewModel::createRecommendedAccount,
                         onGenerateDemo = viewModel::generateDemoData
                     )
@@ -237,6 +241,23 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                             }
                         )
                     }
+                }
+            }
+            composable(
+                route = "smart-items?selectedId={selectedId}",
+                arguments = listOf(
+                    navArgument("selectedId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) { backStackEntry ->
+                ScreenWithInsets(scaffoldPadding = padding) {
+                    SmartItemsScreen(
+                        selectedCardId = backStackEntry.arguments?.getString("selectedId"),
+                        onBack = { navController.popBackStack() }
+                    )
                 }
             }
             composable("add") {

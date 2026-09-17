@@ -100,6 +100,12 @@ class MainActivity : ComponentActivity() {
         when (intent?.action) {
             ACTION_OPEN_QUICK_CAPTURE_SETTINGS -> viewModel.requestNavigation("settings")
             ACTION_OPEN_RECEIPT -> viewModel.requestNavigation("receipt")
+            ACTION_OPEN_SMART_ITEMS -> {
+                val cardId = intent.getStringExtra(EXTRA_SMART_CARD_ID)
+                viewModel.requestNavigation(
+                    cardId?.let { "smart-items?selectedId=$it" } ?: "smart-items"
+                )
+            }
             ACTION_EDIT_QUICK_CAPTURE -> intent.getStringExtra(EXTRA_QUICK_SESSION_ID)?.let {
                 viewModel.requestNavigation("receipt-quick/$it")
             }
@@ -110,6 +116,8 @@ class MainActivity : ComponentActivity() {
         const val ACTION_OPEN_QUICK_CAPTURE_SETTINGS = "com.jianzhang.app.OPEN_QUICK_CAPTURE_SETTINGS"
         const val ACTION_EDIT_QUICK_CAPTURE = "com.jianzhang.app.EDIT_QUICK_CAPTURE"
         const val ACTION_OPEN_RECEIPT = "com.jianzhang.app.OPEN_RECEIPT"
+        const val ACTION_OPEN_SMART_ITEMS = "com.jianzhang.app.OPEN_SMART_ITEMS"
         const val EXTRA_QUICK_SESSION_ID = "quick_session_id"
+        const val EXTRA_SMART_CARD_ID = "smart_card_id"
     }
 }
