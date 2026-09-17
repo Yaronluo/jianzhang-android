@@ -31,7 +31,7 @@ class ActionRouter(private val context: Context) {
                         return@forEach
                     }
                     expenseHandled = true
-                    if (QuickCaptureEligibility.canDirectSave(draft)) {
+                    if (QuickCaptureEligibility.canSaveAfterUserConfirmation(draft)) {
                         QuickReceiptSaveUseCase(context).save(draft)
                         executed++
                     } else {

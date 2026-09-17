@@ -208,12 +208,18 @@ class QuickCaptureAccessibilityService : AccessibilityService() {
         if (actions.size > 1) {
             val lines = actions.joinToString("\n") { actionSummary(it) }
             val executable = actions.any { it.confidence >= MIN_REVIEW_CONFIDENCE }
+            val expenseNeedsReview = draft.expenseAction != null &&
+                !QuickCaptureEligibility.canSaveAfterUserConfirmation(draft)
             showOverlay(
                 title = "检测到${actions.size}项信息",
                 message = "${draft.analysis.source}\n$lines",
                 buttons = buildList {
                     if (draft.expenseAction != null) add("查看修改" to { openEditor(draft.sessionId) })
-                    if (executable) add("全部执行" to { executeActions(draft) })
+                    if (executable) add(
+                        (if (expenseNeedsReview) "执行其他项并核对账单" else "全部执行") to {
+                            executeActions(draft)
+                        }
+                    )
                     add("关闭" to { cancelSession(draft.sessionId) })
                 }
             )
@@ -282,8 +288,10 @@ class QuickCaptureAccessibilityService : AccessibilityService() {
     }
 
     private fun executeActions(draft: QuickCaptureDraft) {
-        val expenseCanDirectSave = draft.expenseAction?.let { QuickCaptureEligibility.canDirectSave(draft) } == true
-        val canFinishImmediately = draft.expenseAction == null || expenseCanDirectSave
+        val expenseCanSave = draft.expenseAction?.let {
+            QuickCaptureEligibility.canSaveAfterUserConfirmation(draft)
+        } == true
+        val canFinishImmediately = draft.expenseAction == null || expenseCanSave
         if (canFinishImmediately && !QuickCaptureSessionRegistry.tryBeginSaving(draft.sessionId)) return
         showLoading("正在执行已确认操作……", draft.sessionId)
         scope.launch {

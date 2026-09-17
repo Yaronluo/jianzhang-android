@@ -136,13 +136,17 @@ object ReceiptParser {
             reportedConfidence == ReceiptFieldConfidence.HIGH -> ReceiptFieldConfidence.HIGH
             else -> ReceiptFieldConfidence.LOW
         }
-        val category = aiCategoryId(json.nullableString("category"))
+        val category = ExpenseCategoryResolver.resolve(
+            category = json.nullableString("category"),
+            merchant = merchant,
+            recognitionText = rawText
+        )
         val warnings = buildList {
             if (amount == null) add("AI 没有可靠识别到金额，请手动填写")
             else if (amountConfidence != ReceiptFieldConfidence.HIGH) add("AI 对金额把握较低，请重点核对")
             if (parsedDate == null) add("AI 没有识别到有效日期，已填今天，请核对")
             if (merchant.isBlank()) add("AI 没有识别到商户，可手动填写")
-            if (category.second == ReceiptFieldConfidence.LOW) add("分类为系统推测，请按实际情况选择")
+            if (category.confidence == ReceiptFieldConfidence.LOW) add("分类为系统推测，请按实际情况选择")
         }
         return ParsedReceipt(
             rawText = rawText,
@@ -154,8 +158,8 @@ object ReceiptParser {
             time = (parsedTime ?: nowTime).format(DateTimeFormatter.ofPattern("HH:mm")),
             merchant = merchant,
             paymentMethod = paymentMethod,
-            categoryId = category.first,
-            categoryConfidence = category.second,
+            categoryId = category.id,
+            categoryConfidence = category.confidence,
             warnings = warnings,
             recognitionSource = sourceName
         )
@@ -249,33 +253,6 @@ object ReceiptParser {
         return opt(name)?.toString()?.trim()?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
     }
 
-    private fun aiCategoryId(value: String?): Pair<String, ReceiptFieldConfidence> {
-        val category = value.orEmpty().trim()
-        val id = when {
-            category.contains("餐") || category.contains("食品") -> DefaultData.FOOD
-            category.contains("交通") -> DefaultData.TRANSPORT
-            category.contains("购物") -> DefaultData.SHOPPING
-            category.contains("医疗") -> DefaultData.MEDICAL
-            category.contains("居住") || category.contains("住房") -> DefaultData.HOUSING
-            category.contains("水电") || category.contains("燃气") -> DefaultData.UTILITIES
-            category.contains("通讯") || category.contains("通信") -> DefaultData.COMMUNICATION
-            category.contains("服饰") || category.contains("服装") -> DefaultData.CLOTHING
-            category.contains("学习") || category.contains("教育") -> DefaultData.STUDY
-            category.contains("娱乐") -> DefaultData.ENTERTAINMENT
-            category.contains("日用") -> DefaultData.DAILY
-            category.contains("家庭") -> DefaultData.FAMILY
-            category.contains("旅行") || category.contains("旅游") -> DefaultData.TRAVEL
-            category.contains("汽车") -> DefaultData.CAR
-            category.contains("运动") || category.contains("健身") -> DefaultData.SPORTS
-            category.contains("宠物") -> DefaultData.PET
-            category.contains("订阅") -> DefaultData.SUBSCRIPTION
-            category.contains("人情") || category.contains("社交") -> DefaultData.SOCIAL
-            category.contains("保险") -> DefaultData.INSURANCE
-            else -> DefaultData.OTHER_EXPENSE
-        }
-        return id to if (id == DefaultData.OTHER_EXPENSE) ReceiptFieldConfidence.LOW else ReceiptFieldConfidence.HIGH
-    }
-
     private fun findDate(text: String, today: LocalDate): LocalDate? {
         fullDateRegex.findAll(text).forEach { match ->
             val parsed = safeDate(
@@ -347,27 +324,12 @@ object ReceiptParser {
             !identifierWords.any(value::contains) && amountMatches(value).none()
 
     private fun findCategory(text: String, merchant: String): Pair<String, ReceiptFieldConfidence> {
-        val source = "$merchant $text"
-        val categoryRules = listOf(
-            DefaultData.MEDICAL to listOf("医院", "诊所", "药房", "药店", "挂号", "医疗"),
-            DefaultData.TRANSPORT to listOf("滴滴", "打车", "出租车", "地铁", "公交", "停车", "加油", "车票", "高速"),
-            DefaultData.FOOD to listOf("餐厅", "饭店", "饭馆", "面馆", "咖啡", "奶茶", "外卖", "餐饮", "美食", "火锅", "早餐", "午餐", "晚餐"),
-            DefaultData.SHOPPING to listOf("超市", "商场", "便利店", "购物", "淘宝", "京东", "拼多多"),
-            DefaultData.UTILITIES to listOf("电费", "水费", "燃气", "天然气", "物业费"),
-            DefaultData.COMMUNICATION to listOf("话费", "流量", "宽带", "通信", "中国移动", "中国联通", "中国电信"),
-            DefaultData.CLOTHING to listOf("服装", "衣服", "鞋", "帽", "优衣库"),
-            DefaultData.STUDY to listOf("书店", "图书", "教材", "文具", "课程"),
-            DefaultData.ENTERTAINMENT to listOf("电影", "影院", "游戏", "KTV", "娱乐"),
-            DefaultData.DAILY to listOf("日用品", "百货", "家居", "清洁用品"),
-            DefaultData.TRAVEL to listOf("酒店", "宾馆", "民宿", "旅行", "景区"),
-            DefaultData.CAR to listOf("汽车", "维修", "保养", "洗车"),
-            DefaultData.SPORTS to listOf("健身", "运动", "球馆"),
-            DefaultData.PET to listOf("宠物", "猫粮", "狗粮"),
-            DefaultData.INSURANCE to listOf("保险", "保费")
+        val match = ExpenseCategoryResolver.resolve(
+            category = null,
+            merchant = merchant,
+            recognitionText = text
         )
-        categoryRules.firstOrNull { (_, words) -> words.any { source.contains(it, ignoreCase = true) } }
-            ?.let { return it.first to ReceiptFieldConfidence.HIGH }
-        return DefaultData.OTHER_EXPENSE to ReceiptFieldConfidence.LOW
+        return match.id to match.confidence
     }
 
     private fun normalize(input: String): String = buildString(input.length) {

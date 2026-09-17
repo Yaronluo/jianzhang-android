@@ -203,7 +203,10 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                     if (draft == null) {
                         LaunchedEffect(sessionId) {
                             QuickCaptureTileService.reset(context)
-                            navController.popBackStack()
+                            navController.navigate("ledger") {
+                                popUpTo("ledger") { inclusive = false }
+                                launchSingleTop = true
+                            }
                         }
                     } else {
                         ReceiptEntryScreen(
@@ -214,10 +217,23 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                             requireAccount = true,
                             onBack = ::cancelQuickEditor,
                             onSave = { amount, category, account, date, time, merchant, paymentMethod, note ->
-                                val saving = viewModel.saveQuickCaptureReceipt(
-                                    sessionId, amount, category, account, date, time, merchant, paymentMethod, note
-                                )
-                                if (saving) navController.popBackStack()
+                                viewModel.saveQuickCaptureReceipt(
+                                    sessionId,
+                                    amount,
+                                    category,
+                                    account,
+                                    date,
+                                    time,
+                                    merchant,
+                                    paymentMethod,
+                                    note
+                                ) {
+                                    viewModel.setMonth(date.take(7))
+                                    navController.navigate("ledger") {
+                                        popUpTo("ledger") { inclusive = false }
+                                        launchSingleTop = true
+                                    }
+                                }
                             }
                         )
                     }

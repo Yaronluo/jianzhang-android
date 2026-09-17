@@ -2,6 +2,7 @@ package com.jianzhang.app.quickcapture
 
 import com.jianzhang.app.domain.parser.ParsedReceipt
 import com.jianzhang.app.domain.parser.ReceiptFieldConfidence
+import com.jianzhang.app.data.model.DefaultData
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -67,6 +68,29 @@ class QuickCaptureSessionTest {
         assertFalse(
             QuickCaptureEligibility.canDirectSave(
                 QuickCaptureDraft("category-confidence", valid.copy(categoryConfidence = ReceiptFieldConfidence.LOW), "cash")
+            )
+        )
+    }
+
+    @Test
+    fun explicitAllExecute_allowsWeakCategoryButNotWeakAmount() {
+        val genericCategory = receipt().copy(
+            categoryId = DefaultData.OTHER_EXPENSE,
+            categoryConfidence = ReceiptFieldConfidence.LOW
+        )
+        assertFalse(QuickCaptureEligibility.canDirectSave(QuickCaptureDraft("strict", genericCategory, "cash")))
+        assertTrue(
+            QuickCaptureEligibility.canSaveAfterUserConfirmation(
+                QuickCaptureDraft("confirmed", genericCategory, "cash")
+            )
+        )
+        assertFalse(
+            QuickCaptureEligibility.canSaveAfterUserConfirmation(
+                QuickCaptureDraft(
+                    "amount-low",
+                    genericCategory.copy(amountConfidence = ReceiptFieldConfidence.LOW),
+                    "cash"
+                )
             )
         )
     }

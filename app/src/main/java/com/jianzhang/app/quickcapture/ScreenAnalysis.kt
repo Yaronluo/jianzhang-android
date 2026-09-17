@@ -1,7 +1,7 @@
 package com.jianzhang.app.quickcapture
 
-import com.jianzhang.app.data.model.DefaultData
 import com.jianzhang.app.domain.parser.ParsedReceipt
+import com.jianzhang.app.domain.parser.ExpenseCategoryResolver
 import com.jianzhang.app.domain.parser.ReceiptFieldConfidence
 import org.json.JSONArray
 import org.json.JSONObject
@@ -149,7 +149,12 @@ fun ExpenseAction.toParsedReceipt(
     val timeValue = time?.take(5)?.takeIf { runCatching { LocalTime.parse(it) }.isSuccess }
         ?: "%02d:%02d".format(now.hour, now.minute)
     val high = confidence >= 0.85
-    val categoryId = screenCategoryId(category)
+    val categoryMatch = ExpenseCategoryResolver.resolve(
+        category = category,
+        merchant = merchant,
+        recognitionText = rawText
+    )
+    val categoryId = categoryMatch.id
     return ParsedReceipt(
         rawText = rawText,
         amountInCents = cents,
@@ -161,7 +166,11 @@ fun ExpenseAction.toParsedReceipt(
         merchant = merchant.orEmpty(),
         paymentMethod = paymentMethod.orEmpty(),
         categoryId = categoryId,
-        categoryConfidence = if (categoryId != DefaultData.OTHER_EXPENSE && high) ReceiptFieldConfidence.HIGH else ReceiptFieldConfidence.LOW,
+        categoryConfidence = if (high && categoryMatch.confidence == ReceiptFieldConfidence.HIGH) {
+            ReceiptFieldConfidence.HIGH
+        } else {
+            ReceiptFieldConfidence.LOW
+        },
         warnings = buildList {
             if (cents == null) add("没有可靠识别到金额，请手动填写")
             if (!high) add("该动作置信度较低，请重点核对")
@@ -169,20 +178,4 @@ fun ExpenseAction.toParsedReceipt(
         },
         recognitionSource = source
     )
-}
-
-private fun screenCategoryId(value: String?): String = when {
-    value.orEmpty().contains("餐") -> DefaultData.FOOD
-    value.orEmpty().contains("交通") -> DefaultData.TRANSPORT
-    value.orEmpty().contains("购物") -> DefaultData.SHOPPING
-    value.orEmpty().contains("医疗") -> DefaultData.MEDICAL
-    value.orEmpty().contains("居住") -> DefaultData.HOUSING
-    value.orEmpty().contains("水电") || value.orEmpty().contains("燃气") -> DefaultData.UTILITIES
-    value.orEmpty().contains("通讯") -> DefaultData.COMMUNICATION
-    value.orEmpty().contains("服") -> DefaultData.CLOTHING
-    value.orEmpty().contains("学习") -> DefaultData.STUDY
-    value.orEmpty().contains("娱乐") -> DefaultData.ENTERTAINMENT
-    value.orEmpty().contains("日用") -> DefaultData.DAILY
-    value.orEmpty().contains("旅行") -> DefaultData.TRAVEL
-    else -> DefaultData.OTHER_EXPENSE
 }

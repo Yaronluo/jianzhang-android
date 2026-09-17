@@ -1,5 +1,7 @@
 package com.jianzhang.app.quickcapture
 
+import com.jianzhang.app.data.model.DefaultData
+import com.jianzhang.app.domain.parser.ReceiptFieldConfidence
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -51,6 +53,36 @@ class ScreenAnalysisParserTest {
         val pickup = analysis.actions.filterIsInstance<PickupAction>().single()
         assertEquals("A037", pickup.code)
         assertNull(pickup.time)
+        val receipt = analysis.actions.filterIsInstance<ExpenseAction>().single().toParsedReceipt()
+        assertEquals(DefaultData.FOOD, receipt.categoryId)
+        assertEquals(ReceiptFieldConfidence.HIGH, receipt.categoryConfidence)
+    }
+
+    @Test
+    fun obviousMerchant_correctsGenericAiCategory() {
+        val analysis = ScreenAnalysisParser.parseAiResponse(
+            """{"schemaVersion":1,"rawText":"麦当劳 到店自取订单","actions":[{"type":"expense","confidence":0.97,"data":{"amount":"18.00","merchant":"麦当劳五一广场店","category":"其他","date":"2026-09-16","time":"12:30","paymentMethod":"微信支付"}}]}""",
+            "AI屏幕识别"
+        )
+
+        val receipt = analysis.actions.filterIsInstance<ExpenseAction>().single().toParsedReceipt()
+        assertEquals(DefaultData.FOOD, receipt.categoryId)
+        assertEquals(ReceiptFieldConfidence.HIGH, receipt.categoryConfidence)
+    }
+
+    @Test
+    fun pickupLanguage_classifiesExpenseAsFoodWhenOcrMissesMerchantTitle() {
+        val analysis = LocalSceneParser.parse(
+            """
+            到店自取订单
+            实付金额 18.00 元
+            取餐码 A037
+            """.trimIndent()
+        )
+
+        val receipt = analysis.actions.filterIsInstance<ExpenseAction>().single().toParsedReceipt()
+        assertEquals(DefaultData.FOOD, receipt.categoryId)
+        assertEquals(ReceiptFieldConfidence.HIGH, receipt.categoryConfidence)
     }
 
     @Test

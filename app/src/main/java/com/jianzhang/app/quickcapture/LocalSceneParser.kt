@@ -2,6 +2,7 @@ package com.jianzhang.app.quickcapture
 
 import com.jianzhang.app.domain.parser.ReceiptFieldConfidence
 import com.jianzhang.app.domain.parser.ReceiptParser
+import com.jianzhang.app.data.model.DefaultData
 
 /** Conservative offline scene rules. An action is emitted only when an explicit scene keyword and identifier coexist. */
 object LocalSceneParser {
@@ -26,7 +27,7 @@ object LocalSceneParser {
                         confidence = if (receipt.amountConfidence == ReceiptFieldConfidence.HIGH) 0.9 else 0.7,
                         amount = "%.2f".format(receipt.amountInCents / 100.0),
                         merchant = receipt.merchant.ifBlank { null },
-                        category = null,
+                        category = DefaultData.categories.firstOrNull { it.id == receipt.categoryId }?.name,
                         date = receipt.date.takeIf { receipt.dateConfidence == ReceiptFieldConfidence.HIGH },
                         time = receipt.time,
                         paymentMethod = receipt.paymentMethod.ifBlank { null },

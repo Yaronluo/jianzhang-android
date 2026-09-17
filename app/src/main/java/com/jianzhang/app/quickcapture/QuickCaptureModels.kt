@@ -163,6 +163,24 @@ object QuickCaptureEligibility {
             receipt.dateConfidence == ReceiptFieldConfidence.HIGH &&
             receipt.categoryConfidence == ReceiptFieldConfidence.HIGH
     }
+
+    /**
+     * "全部执行" is an explicit confirmation of the values shown in the
+     * overlay. A weak category may therefore be saved as "other", but an
+     * uncertain amount/date must still go through the editor.
+     */
+    fun canSaveAfterUserConfirmation(draft: QuickCaptureDraft): Boolean {
+        val action = draft.expenseAction ?: return false
+        if (action.confidence < 0.85) return false
+        val receipt = draft.receipt
+        return receipt.amountInCents?.let { it > 0 } == true &&
+            runCatching { LocalDate.parse(receipt.date) }.isSuccess &&
+            runCatching { LocalTime.parse(receipt.time) }.isSuccess &&
+            receipt.categoryId.isNotBlank() &&
+            draft.resolvedAccountId != null &&
+            receipt.amountConfidence == ReceiptFieldConfidence.HIGH &&
+            receipt.dateConfidence == ReceiptFieldConfidence.HIGH
+    }
 }
 
 object QuickCaptureWindowGuard {

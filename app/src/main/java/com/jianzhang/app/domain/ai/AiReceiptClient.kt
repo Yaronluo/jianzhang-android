@@ -199,6 +199,7 @@ object AiReceiptClient {
             time：消费时间，HH:mm；无法确定为 null。
             merchant：实际收款商户；无法确定为 null。不要把支付机构、银行、退款提示当商户。
             category：只能是 餐饮、交通、购物、医疗、居住、水电燃气、通讯、服饰、学习、娱乐、日用、家庭、旅行、汽车、运动、宠物、订阅、人情、保险、其他 之一。
+            分类必须结合商户经营类型判断；麦当劳、肯德基、星巴克、瑞幸等餐厅、快餐或饮品商户应归为餐饮，不要因为画面是订单页或取餐页就归为其他。
             payment_method：付款账户或方式；无法确定为 null。
             confidence：只能是 high、low、missing，表示关键字段整体可信度。
             raw_text：图片中的关键原文，无法读取则为空字符串。
@@ -225,6 +226,7 @@ object AiReceiptClient {
             {"schemaVersion":1,"summary":string|null,"rawText":string|null,"actions":[...]}
             actions 允许的 type 仅为 expense、pickup、package、travel；每个元素必须含 type、0到1之间的 confidence 和 data。
             expense.data 字段：amount, merchant, category, date, time, paymentMethod。
+            expense.category 必须结合商户经营类型判断；麦当劳、肯德基、星巴克、瑞幸等餐厅、快餐或饮品商户应归为餐饮，只有确实无法判断时才能填其他。
             pickup.data 字段：merchant, code, queueNumber, tableNumber, location, time。
             package.data 字段：company, code, location, shelf, deadline。
             travel.data 字段：travelType, number, from, to, date, departureTime, arrivalTime, terminal, gate, carriage, seat, boardingTime。

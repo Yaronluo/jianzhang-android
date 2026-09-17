@@ -205,11 +205,16 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         time: String,
         merchant: String,
         paymentMethod: String,
-        note: String
+        note: String,
+        onSaved: () -> Unit = {}
     ): Boolean {
         val amount = parseMoneyToCents(amountText)
         if (amount == null || accountId == null) {
             _events.tryEmit(if (amount == null) "请核对并填写正确金额" else "请选择记账账户")
+            return false
+        }
+        if (runCatching { LocalDate.parse(date) }.isFailure || runCatching { LocalTime.parse(time) }.isFailure) {
+            _events.tryEmit("请核对账单日期和时间")
             return false
         }
         if (!com.jianzhang.app.quickcapture.QuickCaptureSessionRegistry.tryBeginSaving(sessionId)) return false
@@ -236,6 +241,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 com.jianzhang.app.quickcapture.QuickCaptureSessionRegistry.reset(sessionId)
                 QuickCaptureTileService.reset(getApplication())
                 _events.emit("AI截图账单已保存")
+                onSaved()
             }.onFailure {
                 com.jianzhang.app.quickcapture.QuickCaptureSessionRegistry.finish(
                     sessionId,
