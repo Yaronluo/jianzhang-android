@@ -75,6 +75,7 @@ fun SettingsScreen(
     state: FinanceUiState,
     onBack: () -> Unit,
     onGenerateDemo: () -> Unit,
+    onGenerateCompetitionDemo: () -> Unit,
     onClearDemo: () -> Unit,
     onOpenAssets: () -> Unit,
     onOpenAiSettings: () -> Unit,
@@ -121,7 +122,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
             title = { Text("清除演示数据？") },
-            text = { Text("只会删除由“生成演示数据”创建的账单、账户、固定支出和预算，不会删除真实数据。") },
+            text = { Text("会删除普通演示和比赛演示创建的账单、账户、固定支出、预算及当前事项，不会删除真实数据。") },
             confirmButton = {
                 TextButton(onClick = { onClearDemo(); showClearConfirm = false }) { Text("清除", color = MaterialTheme.colorScheme.error) }
             },
@@ -351,7 +352,13 @@ fun SettingsScreen(
                 SettingsSectionTitle("演示数据")
                 AppCard(modifier = Modifier.padding(top = 10.dp)) {
                     Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Text("快速生成一套账本、资产与图表数据，方便现场展示。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("普通演示数据适合测试账本功能；比赛演示场景适合直接录制视频。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Button(onClick = onGenerateCompetitionDemo, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp)) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                            Text(" 生成比赛演示场景")
+                        }
+                        Text("固定三个月账单、预算、固定支出，并准备取件和出行事项。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        HorizontalDivider()
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Button(onClick = onGenerateDemo, modifier = Modifier.weight(1.35f).height(50.dp), shape = RoundedCornerShape(16.dp)) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = null)

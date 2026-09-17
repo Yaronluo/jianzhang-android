@@ -360,6 +360,7 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                         state = state,
                         onBack = { navController.popBackStack() },
                         onGenerateDemo = viewModel::generateDemoData,
+                        onGenerateCompetitionDemo = viewModel::generateCompetitionDemoData,
                         onClearDemo = viewModel::clearDemoData,
                         onOpenAssets = {
                             navController.popBackStack()

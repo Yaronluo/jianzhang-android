@@ -17,6 +17,8 @@ import com.jianzhang.app.data.preferences.AiConfigStore
 import com.jianzhang.app.data.repository.FinanceRepository
 import com.jianzhang.app.domain.ai.AiReceiptSettings
 import com.jianzhang.app.quickcapture.QuickCaptureTileService
+import com.jianzhang.app.quickcapture.SmartCardStore
+import com.jianzhang.app.quickcapture.SmartNotificationManager
 import com.jianzhang.app.util.parseMoneyToCents
 import com.jianzhang.app.util.parseMoneyToCentsOrZero
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -464,18 +466,45 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     fun generateDemoData() {
         viewModelScope.launch {
-            runCatching { repository.generateDemoData() }
+            runCatching {
+                repository.generateDemoData()
+                clearCompetitionDemoCards()
+            }
                 .onSuccess { _events.emit("演示数据已生成") }
                 .onFailure { _events.emit(it.message ?: "演示数据生成失败") }
         }
     }
 
+    fun generateCompetitionDemoData() {
+        viewModelScope.launch {
+            runCatching {
+                repository.generateCompetitionDemoData()
+                val store = SmartCardStore(getApplication())
+                store.replaceCompetitionDemoCards()
+                SmartNotificationManager(getApplication()).restoreAll()
+            }
+                .onSuccess { _events.emit("比赛演示场景已生成，可直接开始录屏") }
+                .onFailure { _events.emit(it.message ?: "比赛演示场景生成失败") }
+        }
+    }
+
     fun clearDemoData() {
         viewModelScope.launch {
-            runCatching { repository.clearDemoData() }
+            runCatching {
+                repository.clearDemoData()
+                clearCompetitionDemoCards()
+            }
                 .onSuccess { _events.emit("演示数据已清除，真实数据未受影响") }
                 .onFailure { _events.emit(it.message ?: "演示数据清除失败") }
         }
+    }
+
+    private fun clearCompetitionDemoCards() {
+        val notifications = SmartNotificationManager(getApplication())
+        SmartCardStore(getApplication())
+            .clearCompetitionDemoCards()
+            .forEach(notifications::cancel)
+        notifications.restoreAll()
     }
 
     fun selectedDateOrToday(date: String?): String = date ?: LocalDate.now().toString()

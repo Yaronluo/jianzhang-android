@@ -365,6 +365,257 @@ class FinanceRepository(private val database: AppDatabase) {
         }
     }
 
+    /**
+     * Builds a coherent, repeatable-enough recording scene instead of a bag
+     * of isolated sample bills. The anchor is today so the current-month
+     * ledger and statistics screens are immediately useful when recording.
+     */
+    suspend fun generateCompetitionDemoData() {
+        database.withTransaction {
+            clearDemoDataInternal()
+            val anchor = LocalDate.now()
+            val now = System.currentTimeMillis()
+            val cashId = newId("competition-cash")
+            val alipayId = newId("competition-alipay")
+            val wechatId = newId("competition-wechat")
+            val bankId = newId("competition-bank")
+            val creditId = newId("competition-credit")
+
+            listOf(
+                AccountEntity(
+                    id = cashId,
+                    name = "现金",
+                    type = AccountType.CASH,
+                    balanceInCents = 38000,
+                    icon = "💵",
+                    createdAt = now,
+                    updatedAt = now,
+                    isDemo = true
+                ),
+                AccountEntity(
+                    id = alipayId,
+                    name = "支付宝",
+                    type = AccountType.ALIPAY,
+                    balanceInCents = 160000,
+                    icon = "🟦",
+                    createdAt = now,
+                    updatedAt = now,
+                    isDemo = true
+                ),
+                AccountEntity(
+                    id = wechatId,
+                    name = "微信支付",
+                    type = AccountType.WECHAT,
+                    balanceInCents = 110000,
+                    icon = "💬",
+                    createdAt = now,
+                    updatedAt = now,
+                    isDemo = true
+                ),
+                AccountEntity(
+                    id = bankId,
+                    name = "银行卡",
+                    type = AccountType.BANK_CARD,
+                    balanceInCents = 500000,
+                    icon = "🏦",
+                    createdAt = now,
+                    updatedAt = now,
+                    isDemo = true
+                ),
+                AccountEntity(
+                    id = creditId,
+                    name = "信用卡",
+                    type = AccountType.CREDIT_CARD,
+                    balanceInCents = -80000,
+                    icon = "💳",
+                    isLiability = true,
+                    createdAt = now,
+                    updatedAt = now,
+                    isDemo = true
+                )
+            ).forEach { dao.insertAccount(it) }
+
+            val competitionTransactions = listOf(
+                demoTransaction(
+                    320000,
+                    TransactionType.INCOME,
+                    DefaultData.LIVING_EXPENSE,
+                    bankId,
+                    anchor.withDayOfMonth(1),
+                    "本月生活费",
+                    time = "08:00",
+                    paymentMethod = "银行卡"
+                ),
+                demoTransaction(
+                    4200,
+                    TransactionType.EXPENSE,
+                    DefaultData.FOOD,
+                    alipayId,
+                    anchor.minusDays(1),
+                    "校园食堂·晚餐",
+                    merchant = "校园食堂",
+                    paymentMethod = "支付宝"
+                ),
+                demoTransaction(
+                    3590,
+                    TransactionType.EXPENSE,
+                    DefaultData.TRANSPORT,
+                    wechatId,
+                    anchor.minusDays(2),
+                    "地铁与公交",
+                    merchant = "长沙地铁",
+                    paymentMethod = "微信支付"
+                ),
+                demoTransaction(
+                    12800,
+                    TransactionType.EXPENSE,
+                    DefaultData.STUDY,
+                    bankId,
+                    anchor.minusDays(4),
+                    "Java后端课程",
+                    merchant = "在线课程平台",
+                    paymentMethod = "银行卡"
+                ),
+                demoTransaction(
+                    6800,
+                    TransactionType.EXPENSE,
+                    DefaultData.ENTERTAINMENT,
+                    creditId,
+                    anchor.minusDays(6),
+                    "电影与朋友聚餐",
+                    merchant = "万达影城",
+                    paymentMethod = "信用卡"
+                ),
+                demoTransaction(
+                    58000,
+                    TransactionType.EXPENSE,
+                    DefaultData.HOUSING,
+                    bankId,
+                    anchor.minusDays(12),
+                    "宿舍房租",
+                    merchant = "宿舍房租",
+                    paymentMethod = "银行卡"
+                ),
+                demoTransaction(
+                    9800,
+                    TransactionType.EXPENSE,
+                    DefaultData.COMMUNICATION,
+                    alipayId,
+                    anchor.minusDays(14),
+                    "手机套餐",
+                    merchant = "中国移动",
+                    paymentMethod = "支付宝"
+                ),
+                demoTransaction(
+                    2890,
+                    TransactionType.EXPENSE,
+                    DefaultData.FOOD,
+                    alipayId,
+                    anchor.minusDays(16),
+                    "便利店早餐",
+                    merchant = "罗森便利店",
+                    paymentMethod = "支付宝"
+                ),
+                demoTransaction(
+                    300000,
+                    TransactionType.INCOME,
+                    DefaultData.LIVING_EXPENSE,
+                    bankId,
+                    anchor.minusMonths(1).withDayOfMonth(1),
+                    "上月生活费",
+                    time = "08:00",
+                    paymentMethod = "银行卡"
+                ),
+                demoTransaction(3850, TransactionType.EXPENSE, DefaultData.FOOD, alipayId, anchor.minusMonths(1).withDayOfMonth(6), "食堂早餐", merchant = "校园食堂", paymentMethod = "支付宝"),
+                demoTransaction(5200, TransactionType.EXPENSE, DefaultData.FOOD, wechatId, anchor.minusMonths(1).withDayOfMonth(11), "外卖午餐", merchant = "美团外卖", paymentMethod = "微信支付"),
+                demoTransaction(7200, TransactionType.EXPENSE, DefaultData.TRANSPORT, wechatId, anchor.minusMonths(1).withDayOfMonth(14), "周末出行", merchant = "网约车", paymentMethod = "微信支付"),
+                demoTransaction(23900, TransactionType.EXPENSE, DefaultData.SHOPPING, bankId, anchor.minusMonths(1).withDayOfMonth(18), "换季衣物", merchant = "优衣库", paymentMethod = "银行卡"),
+                demoTransaction(12800, TransactionType.EXPENSE, DefaultData.ENTERTAINMENT, creditId, anchor.minusMonths(1).withDayOfMonth(21), "音乐节门票", merchant = "票务平台", paymentMethod = "信用卡"),
+                demoTransaction(18900, TransactionType.EXPENSE, DefaultData.STUDY, bankId, anchor.minusMonths(1).withDayOfMonth(24), "专业书籍", merchant = "图书商城", paymentMethod = "银行卡"),
+                demoTransaction(58000, TransactionType.EXPENSE, DefaultData.HOUSING, bankId, anchor.minusMonths(1).withDayOfMonth(28), "上月房租", merchant = "宿舍房租", paymentMethod = "银行卡"),
+                demoTransaction(
+                    300000,
+                    TransactionType.INCOME,
+                    DefaultData.LIVING_EXPENSE,
+                    bankId,
+                    anchor.minusMonths(2).withDayOfMonth(1),
+                    "前月生活费",
+                    time = "08:00",
+                    paymentMethod = "银行卡"
+                ),
+                demoTransaction(4500, TransactionType.EXPENSE, DefaultData.FOOD, alipayId, anchor.minusMonths(2).withDayOfMonth(5), "校园早餐", merchant = "校园食堂", paymentMethod = "支付宝"),
+                demoTransaction(6800, TransactionType.EXPENSE, DefaultData.TRANSPORT, wechatId, anchor.minusMonths(2).withDayOfMonth(9), "城市公交", merchant = "公交集团", paymentMethod = "微信支付"),
+                demoTransaction(19800, TransactionType.EXPENSE, DefaultData.SHOPPING, bankId, anchor.minusMonths(2).withDayOfMonth(13), "生活用品", merchant = "京东", paymentMethod = "银行卡"),
+                demoTransaction(9800, TransactionType.EXPENSE, DefaultData.ENTERTAINMENT, alipayId, anchor.minusMonths(2).withDayOfMonth(17), "桌游聚会", merchant = "桌游店", paymentMethod = "支付宝"),
+                demoTransaction(15800, TransactionType.EXPENSE, DefaultData.STUDY, bankId, anchor.minusMonths(2).withDayOfMonth(22), "考试资料", merchant = "资料打印店", paymentMethod = "银行卡"),
+                demoTransaction(58000, TransactionType.EXPENSE, DefaultData.HOUSING, bankId, anchor.minusMonths(2).withDayOfMonth(28), "前月房租", merchant = "宿舍房租", paymentMethod = "银行卡")
+            )
+            competitionTransactions.forEach { transaction ->
+                dao.insertTransaction(transaction)
+                applyTransactionEffect(transaction, now)
+            }
+
+            val transfer = TransactionEntity(
+                id = newId("competition-transfer"),
+                amountInCents = 50000,
+                type = TransactionType.TRANSFER,
+                categoryId = null,
+                accountId = bankId,
+                toAccountId = alipayId,
+                date = anchor.minusDays(4).toString(),
+                time = "09:10",
+                note = "银行卡转入支付宝",
+                isDemo = true,
+                createdAt = now,
+                updatedAt = now
+            )
+            dao.insertTransaction(transfer)
+            applyTransactionEffect(transfer, now)
+
+            listOf(
+                RecurringExpenseEntity(
+                    id = newId("competition-rent"),
+                    name = "房租",
+                    amountInCents = 58000,
+                    categoryId = DefaultData.HOUSING,
+                    accountId = bankId,
+                    cycle = RecurringCycle.MONTHLY,
+                    nextDate = anchor.plusDays(5).toString(),
+                    note = "每月宿舍房租",
+                    isDemo = true
+                ),
+                RecurringExpenseEntity(
+                    id = newId("competition-phone"),
+                    name = "手机套餐",
+                    amountInCents = 5900,
+                    categoryId = DefaultData.COMMUNICATION,
+                    accountId = alipayId,
+                    cycle = RecurringCycle.MONTHLY,
+                    nextDate = anchor.plusDays(3).toString(),
+                    note = "每月通信费用",
+                    isDemo = true
+                ),
+                RecurringExpenseEntity(
+                    id = newId("competition-subscription"),
+                    name = "视频会员",
+                    amountInCents = 2500,
+                    categoryId = DefaultData.SUBSCRIPTION,
+                    accountId = alipayId,
+                    cycle = RecurringCycle.MONTHLY,
+                    nextDate = anchor.plusDays(12).toString(),
+                    note = "每月自动续费",
+                    isDemo = true
+                )
+            ).forEach { dao.insertRecurringExpense(it) }
+
+            insertDemoBudgetIfAbsent(anchor.toString().substring(0, 7), 200000)
+            insertDemoBudgetIfAbsent(anchor.minusMonths(1).toString().substring(0, 7), 220000)
+            insertDemoBudgetIfAbsent(anchor.minusMonths(2).toString().substring(0, 7), 220000)
+            insertDemoCategoryBudgetIfAbsent(anchor.toString().substring(0, 7), DefaultData.FOOD, 70000)
+            insertDemoCategoryBudgetIfAbsent(anchor.minusMonths(1).toString().substring(0, 7), DefaultData.FOOD, 70000)
+        }
+    }
+
     private suspend fun clearDemoDataInternal() {
         val now = System.currentTimeMillis()
         dao.getDemoTransactions().forEach { reverseTransactionEffect(it, now) }
@@ -428,7 +679,12 @@ class FinanceRepository(private val database: AppDatabase) {
         categoryId: String,
         accountId: String,
         date: LocalDate,
-        note: String
+        note: String,
+        time: String = "12:30",
+        merchant: String? = null,
+        paymentMethod: String? = null,
+        orderId: String? = null,
+        importSource: String? = null
     ) = TransactionEntity(
         id = newId("demo-transaction"),
         amountInCents = amountInCents,
@@ -436,9 +692,13 @@ class FinanceRepository(private val database: AppDatabase) {
         categoryId = categoryId,
         accountId = accountId,
         date = date.toString(),
-        time = "12:30",
+        time = time,
         note = note,
         isDemo = true,
+        merchant = merchant,
+        paymentMethod = paymentMethod,
+        orderId = orderId,
+        importSource = importSource,
         createdAt = System.currentTimeMillis(),
         updatedAt = System.currentTimeMillis()
     )
