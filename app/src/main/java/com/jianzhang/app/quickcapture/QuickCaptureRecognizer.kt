@@ -2,6 +2,7 @@ package com.jianzhang.app.quickcapture
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.core.content.FileProvider
 import com.jianzhang.app.data.preferences.AiConfigStore
 import com.jianzhang.app.domain.ai.AiReceiptClient
@@ -24,47 +25,51 @@ class QuickCaptureRecognizer(private val context: Context) {
                 }
             }
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-            val settings = AiConfigStore(context).load()
-            return when (settings.mode) {
-                AiRecognitionMode.VISION -> {
-                    val config = settings.activeConfig
-                    if (config == null) {
-                        localFallback(uri, null, onState, "AI 未配置，已回退OCR")
-                    } else {
-                        onState(QuickCaptureState.RECOGNIZING_AI, "AI正在理解当前页面……")
-                        runCatching {
-                            withTimeout(AI_ATTEMPT_TIMEOUT_MILLIS) {
-                                ScreenAnalysisParser.parseAiResponse(
-                                    AiReceiptClient.analyzeScreenImage(context, uri, config),
-                                    "AI屏幕识别"
-                                )
-                            }
-                        }.getOrElse { localFallback(uri, null, onState, "AI失败，已回退OCR") }
-                    }
-                }
-                AiRecognitionMode.OCR_TEXT -> {
-                    onState(QuickCaptureState.RECOGNIZING_OCR, "正在提取文字……")
-                    val text = LocalReceiptOcr.recognize(context, uri)
-                    require(text.isNotBlank()) { "没有识别到有效文字" }
-                    val config = settings.activeConfig
-                    if (config == null) {
-                        localFallback(uri, text, onState, "AI 未配置，已回退OCR")
-                    } else {
-                        onState(QuickCaptureState.RECOGNIZING_AI, "AI正在分析页面文字……")
-                        runCatching {
-                            withTimeout(AI_ATTEMPT_TIMEOUT_MILLIS) {
-                                ScreenAnalysisParser.parseAiResponse(
-                                    AiReceiptClient.analyzeScreenText(config, text),
-                                    "AI+OCR屏幕识别"
-                                ).copy(rawText = text)
-                            }
-                        }.getOrElse { localFallback(uri, text, onState, "AI失败，已回退OCR") }
-                    }
-                }
-                AiRecognitionMode.LOCAL -> localFallback(uri, null, onState, "OCR识别")
-            }
+            return recognize(uri, onState)
         } finally {
             withContext(Dispatchers.IO) { runCatching { file.delete() } }
+        }
+    }
+
+    suspend fun recognize(uri: Uri, onState: (QuickCaptureState, String) -> Unit): ScreenAnalysis {
+        val settings = AiConfigStore(context).load()
+        return when (settings.mode) {
+            AiRecognitionMode.VISION -> {
+                val config = settings.activeConfig
+                if (config == null) {
+                    localFallback(uri, null, onState, "AI 未配置，已回退 OCR")
+                } else {
+                    onState(QuickCaptureState.RECOGNIZING_AI, "AI 正在理解图片内容……")
+                    runCatching {
+                        withTimeout(AI_ATTEMPT_TIMEOUT_MILLIS) {
+                            ScreenAnalysisParser.parseAiResponse(
+                                AiReceiptClient.analyzeScreenImage(context, uri, config),
+                                "AI 图片识别"
+                            )
+                        }
+                    }.getOrElse { localFallback(uri, null, onState, "AI 失败，已回退 OCR") }
+                }
+            }
+            AiRecognitionMode.OCR_TEXT -> {
+                onState(QuickCaptureState.RECOGNIZING_OCR, "正在提取图片文字……")
+                val text = LocalReceiptOcr.recognize(context, uri)
+                require(text.isNotBlank()) { "没有识别到有效文字" }
+                val config = settings.activeConfig
+                if (config == null) {
+                    localFallback(uri, text, onState, "AI 未配置，已回退 OCR")
+                } else {
+                    onState(QuickCaptureState.RECOGNIZING_AI, "AI 正在判断可执行事项……")
+                    runCatching {
+                        withTimeout(AI_ATTEMPT_TIMEOUT_MILLIS) {
+                            ScreenAnalysisParser.parseAiResponse(
+                                AiReceiptClient.analyzeScreenText(config, text),
+                                "AI + OCR 图片识别"
+                            ).copy(rawText = text)
+                        }
+                    }.getOrElse { localFallback(uri, text, onState, "AI 失败，已回退 OCR") }
+                }
+            }
+            AiRecognitionMode.LOCAL -> localFallback(uri, null, onState, "本地 OCR 识别")
         }
     }
 

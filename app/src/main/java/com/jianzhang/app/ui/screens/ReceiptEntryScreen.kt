@@ -25,17 +25,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.FlightTakeoff
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.Button
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -58,13 +64,21 @@ import androidx.core.content.FileProvider
 import com.jianzhang.app.data.local.entity.AccountEntity
 import com.jianzhang.app.data.local.entity.CategoryType
 import com.jianzhang.app.domain.account.AccountSelectionPolicy
-import com.jianzhang.app.domain.ai.AiReceiptClient
 import com.jianzhang.app.domain.ai.AiReceiptConfig
 import com.jianzhang.app.domain.ai.AiReceiptSettings
 import com.jianzhang.app.domain.ai.AiRecognitionMode
-import com.jianzhang.app.domain.ocr.LocalReceiptOcr
 import com.jianzhang.app.domain.parser.ParsedReceipt
 import com.jianzhang.app.domain.parser.ReceiptParser
+import com.jianzhang.app.quickcapture.ActionRouter
+import com.jianzhang.app.quickcapture.ExpenseAction
+import com.jianzhang.app.quickcapture.PackageAction
+import com.jianzhang.app.quickcapture.PickupAction
+import com.jianzhang.app.quickcapture.QuickCaptureDraft
+import com.jianzhang.app.quickcapture.QuickCaptureRecognizer
+import com.jianzhang.app.quickcapture.ScreenAction
+import com.jianzhang.app.quickcapture.ScreenAnalysis
+import com.jianzhang.app.quickcapture.TravelAction
+import com.jianzhang.app.quickcapture.toParsedReceipt
 import com.jianzhang.app.ui.FinanceUiState
 import com.jianzhang.app.ui.components.AppDropdownField
 import com.jianzhang.app.ui.components.AppDropdownItem
@@ -76,11 +90,14 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.time.LocalDate
 import java.time.LocalTime
+import java.util.UUID
 
 private sealed interface ReceiptEntryPhase {
     data object ChooseSource : ReceiptEntryPhase
     data object Recognizing : ReceiptEntryPhase
+    data class Review(val analysis: ScreenAnalysis) : ReceiptEntryPhase
     data class Confirm(val receipt: ParsedReceipt) : ReceiptEntryPhase
+    data class Completed(val title: String, val message: String) : ReceiptEntryPhase
     data class Failed(val message: String) : ReceiptEntryPhase
 }
 
@@ -112,9 +129,14 @@ fun ReceiptEntryScreen(
         )
     }
     var pendingCameraUri by rememberSaveable { mutableStateOf<String?>(null) }
+    var recognitionMessage by rememberSaveable { mutableStateOf("正在读取图片……") }
 
     fun handleBack() {
-        if (initialReceipt != null || phase !is ReceiptEntryPhase.Confirm) {
+        if (
+            initialReceipt != null ||
+            phase is ReceiptEntryPhase.ChooseSource ||
+            phase is ReceiptEntryPhase.Recognizing
+        ) {
             onBack()
         } else {
             phase = ReceiptEntryPhase.ChooseSource
@@ -124,55 +146,66 @@ fun ReceiptEntryScreen(
     BackHandler(onBack = ::handleBack)
 
     fun processImage(uri: Uri) {
+        recognitionMessage = "正在读取图片……"
         phase = ReceiptEntryPhase.Recognizing
         scope.launch {
-            val cloudResult = if (aiConfig != null) {
-                runCatching {
-                    when (aiConfig.mode) {
-                        AiRecognitionMode.VISION -> ReceiptParser.parseAiResponse(
-                            responseText = AiReceiptClient.recognizeImage(context, uri, aiConfig),
-                            sourceName = "${aiConfig.provider.displayName} AI"
-                        )
-                        AiRecognitionMode.OCR_TEXT -> {
-                            val localText = LocalReceiptOcr.recognize(context, uri)
-                            ReceiptParser.parseAiResponse(
-                                responseText = AiReceiptClient.analyzeOcrText(aiConfig, localText),
-                                sourceName = "本地 OCR + ${aiConfig.provider.displayName} AI"
-                            ).let { parsed -> parsed.copy(rawText = parsed.rawText.ifBlank { localText }) }
-                        }
-                        AiRecognitionMode.LOCAL -> error("本地模式不调用云端")
-                    }
+            runCatching {
+                QuickCaptureRecognizer(context).recognize(uri) { _, message ->
+                    recognitionMessage = message
                 }
-            } else null
-
-            if (cloudResult?.isSuccess == true) {
-                phase = ReceiptEntryPhase.Confirm(cloudResult.getOrThrow())
-                return@launch
+            }.onSuccess { analysis ->
+                val actions = analysis.actions
+                phase = when {
+                    actions.isEmpty() -> ReceiptEntryPhase.Failed(
+                        "没有识别到可执行的信息。请换一张内容更完整、文字更清晰的图片重试。"
+                    )
+                    actions.size == 1 && actions.single() is ExpenseAction ->
+                        ReceiptEntryPhase.Confirm((actions.single() as ExpenseAction).toParsedReceipt())
+                    else -> ReceiptEntryPhase.Review(analysis)
+                }
+            }.onFailure { error ->
+                phase = ReceiptEntryPhase.Failed(
+                    error.message?.take(160)?.ifBlank { null }
+                        ?: "识别失败。请换一张清晰图片重试，也可以改为手动记账。"
+                )
             }
+        }
+    }
 
-            runCatching { LocalReceiptOcr.recognize(context, uri) }
-                .onSuccess { text ->
-                    phase = if (text.isBlank()) {
-                        ReceiptEntryPhase.Failed("没有识别到文字。请把票据放平、对焦后重试，也可以继续手动填写。")
-                    } else {
-                        val parsed = ReceiptParser.parse(text)
-                        ReceiptEntryPhase.Confirm(
-                            if (cloudResult?.isFailure == true) {
-                                parsed.copy(
-                                    warnings = listOf("云端 AI 暂不可用，已自动改用本地识别，请重点核对") + parsed.warnings,
-                                    recognitionSource = "本地备用识别"
-                                )
-                            } else parsed
+    fun continueWithAnalysis(analysis: ScreenAnalysis) {
+        val expense = analysis.actions.filterIsInstance<ExpenseAction>().firstOrNull()
+        val otherActions = analysis.actions.filterNot { it is ExpenseAction }
+        recognitionMessage = if (otherActions.isEmpty()) "正在准备账单核对……" else "正在保存已确认事项……"
+        phase = ReceiptEntryPhase.Recognizing
+        scope.launch {
+            val result = runCatching {
+                if (otherActions.isEmpty()) null else {
+                    ActionRouter(context).executeConfirmed(
+                        QuickCaptureDraft(
+                            sessionId = UUID.randomUUID().toString(),
+                            analysis = analysis.copy(actions = otherActions),
+                            resolvedAccountId = null
                         )
-                    }
-                }
-                .onFailure {
-                    val cloudMessage = cloudResult?.exceptionOrNull()?.message
-                    phase = ReceiptEntryPhase.Failed(
-                        cloudMessage?.let { "AI 识别失败（${it.take(120)}），本地识别也未成功。请重试或手动填写。" }
-                            ?: "识别失败。请换一张清晰图片重试，也可以继续手动填写。"
                     )
                 }
+            }
+            if (result.isFailure) {
+                phase = ReceiptEntryPhase.Failed(
+                    result.exceptionOrNull()?.message?.take(160) ?: "保存识别结果失败，请重试。"
+                )
+                return@launch
+            }
+            if (expense != null) {
+                phase = ReceiptEntryPhase.Confirm(expense.toParsedReceipt())
+            } else {
+                val summary = result.getOrNull()
+                val message = buildString {
+                    append("已保存 ${summary?.executed ?: 0} 项到“当前事项”")
+                    if ((summary?.duplicateOrSkipped ?: 0) > 0) append("，跳过重复或低置信结果 ${summary?.duplicateOrSkipped} 项")
+                    if (summary?.notificationPermissionMissing == true) append("。通知权限未开启，事项仍会保留在应用内")
+                }
+                phase = ReceiptEntryPhase.Completed("处理完成", message)
+            }
         }
     }
 
@@ -203,16 +236,27 @@ fun ReceiptEntryScreen(
                 },
                 onGallery = { galleryLauncher.launch("image/*") }
             )
-            ReceiptEntryPhase.Recognizing -> ReceiptRecognizing(onBack = onBack, cloudEnabled = aiConfig != null)
+            ReceiptEntryPhase.Recognizing -> ReceiptRecognizing(onBack = onBack, message = recognitionMessage)
+            is ReceiptEntryPhase.Review -> ActionReview(
+                analysis = current.analysis,
+                onBack = ::handleBack,
+                onContinue = { continueWithAnalysis(current.analysis) }
+            )
             is ReceiptEntryPhase.Failed -> ReceiptFailure(
                 message = current.message,
-                onBack = onBack,
+                onBack = ::handleBack,
                 onRetry = { phase = ReceiptEntryPhase.ChooseSource },
                 onManual = {
                     phase = ReceiptEntryPhase.Confirm(
                         ReceiptParser.parse("", LocalDate.now(), LocalTime.now())
                     )
                 }
+            )
+            is ReceiptEntryPhase.Completed -> RecognitionCompleted(
+                title = current.title,
+                message = current.message,
+                onBack = onBack,
+                onAgain = { phase = ReceiptEntryPhase.ChooseSource }
             )
             is ReceiptEntryPhase.Confirm -> ReceiptConfirmation(
                 state = state,
@@ -239,107 +283,110 @@ private fun ReceiptSourceChooser(
         modifier = Modifier
             .fillMaxSize()
             .padding(start = 22.dp, top = top + 8.dp, end = 22.dp, bottom = bottom + 18.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
-        ReceiptHeader(title = "简易记账", onBack = onBack)
+        ReceiptHeader(title = "AI 识别", onBack = onBack)
+        Spacer(modifier = Modifier.height(34.dp))
         Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+            modifier = Modifier.size(72.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary
         ) {
-            Row(
-                modifier = Modifier.padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Surface(
-                    modifier = Modifier.size(64.dp),
-                    shape = RoundedCornerShape(21.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(34.dp))
-                    }
-                }
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text("拍一张，少写几步", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text(
-                        "购物小票、发票和支付截图都能识别，确认后再入账。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(38.dp))
             }
         }
-        BigReceiptButton(
-            text = "拍照识别",
-            icon = { Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(30.dp)) },
-            onClick = onCamera
+        Spacer(modifier = Modifier.height(22.dp))
+        Text(
+            "看懂图片，直接生成行动",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
         )
-        BigReceiptButton(
-            text = "从相册导入",
-            icon = { Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(30.dp)) },
-            emphasized = false,
-            onClick = onGallery
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            "拍下或导入截图，AI 会判断内容并生成对应操作；一张图也可以同时识别多项。",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 25.sp
         )
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+        Spacer(modifier = Modifier.height(14.dp))
+        Text(
+            "记账  ·  取餐码  ·  取件提醒  ·  出行卡片",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Button(
+                onClick = onCamera,
+                modifier = Modifier.weight(1f).height(68.dp),
+                shape = RoundedCornerShape(21.dp)
+            ) {
+                Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(25.dp))
+                Text("拍照", modifier = Modifier.padding(start = 9.dp), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+            OutlinedButton(
+                onClick = onGallery,
+                modifier = Modifier.weight(1f).height(68.dp),
+                shape = RoundedCornerShape(21.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(25.dp))
+                Text("选图片", modifier = Modifier.padding(start = 9.dp), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(modifier = Modifier.height(18.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(9.dp)
+        ) {
+            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(19.dp), tint = MaterialTheme.colorScheme.primary)
             Text(
-                if (aiConfig != null) "✨ 当前使用 ${aiConfig.provider.displayName} 辅助识别" else "✓ 当前使用本地识别",
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                aiConfig?.let { "${it.provider.displayName} · ${it.mode.displayName}" } ?: "完全本地识别",
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.secondary
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Spacer(modifier = Modifier.weight(1f))
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 24.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top
         ) {
-            Row(
-                modifier = Modifier.padding(18.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                Surface(
-                    modifier = Modifier.size(38.dp),
-                    shape = RoundedCornerShape(13.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                    }
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        if (aiConfig != null) "自定义 AI 已启用" else "本地隐私",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        when {
-                            aiConfig != null && aiConfig.mode == AiRecognitionMode.VISION ->
-                                "你点击拍照或导入后，所选图片将发送到你配置的 ${aiConfig.provider.displayName}。应用不读取微信、支付宝账户。"
-                            aiConfig != null && aiConfig.mode == AiRecognitionMode.OCR_TEXT ->
-                                "图片在本机进行 OCR，只将识别文字发送到你配置的 ${aiConfig.provider.displayName}。应用不读取微信、支付宝账户。"
-                            else ->
-                                "只处理你主动拍摄或选择的图片；文字识别在当前设备完成，不连接微信、支付宝账户，也没有票据上传步骤。"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        lineHeight = 21.sp
-                    )
-                }
+            Icon(
+                Icons.Default.Lock,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("只处理你主动选择的图片", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    when {
+                        aiConfig != null && aiConfig.mode == AiRecognitionMode.VISION ->
+                            "图片会发送到你配置的 ${aiConfig.provider.displayName}；应用不会读取微信、支付宝账户。"
+                        aiConfig != null && aiConfig.mode == AiRecognitionMode.OCR_TEXT ->
+                            "图片先在本机提取文字，仅识别文字会发送到 ${aiConfig.provider.displayName}。"
+                        else -> "图片和文字都在当前设备处理，不会上传。"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 21.sp
+                )
             }
         }
     }
 }
 
 @Composable
-private fun ReceiptRecognizing(onBack: () -> Unit, cloudEnabled: Boolean) {
+private fun ReceiptRecognizing(onBack: () -> Unit, message: String) {
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Column(
         modifier = Modifier.fillMaxSize().padding(start = 22.dp, top = top + 8.dp, end = 22.dp),
@@ -350,11 +397,200 @@ private fun ReceiptRecognizing(onBack: () -> Unit, cloudEnabled: Boolean) {
         Spacer(modifier = Modifier.height(80.dp))
         CircularProgressIndicator(modifier = Modifier.size(56.dp))
         Text(
-            if (cloudEnabled) "正在调用你配置的 AI…" else "正在读取票据文字…",
+            message,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
-        Text("请稍等，识别完成后还需要你核对。", style = MaterialTheme.typography.bodyLarge)
+        Text("完成后会先展示识别到的操作，由你确认是否执行。", style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+@Composable
+private fun ActionReview(
+    analysis: ScreenAnalysis,
+    onBack: () -> Unit,
+    onContinue: () -> Unit
+) {
+    val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val hasExpense = analysis.actions.any { it is ExpenseAction }
+    val hasExecutableOther = analysis.actions.any { it !is ExpenseAction && it.confidence >= 0.65 }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(start = 22.dp, top = top + 8.dp, end = 22.dp, bottom = bottom + 24.dp)
+    ) {
+        ReceiptHeader(title = "识别结果", onBack = onBack)
+        Spacer(modifier = Modifier.height(30.dp))
+        Text(
+            analysis.summary ?: "AI 从图片中找到了这些可执行信息",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(9.dp))
+        Text(
+            "共 ${analysis.actions.size} 项，请核对后再继续。记账信息仍会进入编辑页，不会直接写入账本。",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 24.sp
+        )
+        Spacer(modifier = Modifier.height(28.dp))
+        analysis.actions.forEachIndexed { index, action ->
+            ActionResultRow(action)
+            if (index != analysis.actions.lastIndex) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = 54.dp, top = 16.dp, bottom = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(28.dp))
+        Button(
+            onClick = onContinue,
+            enabled = hasExpense || hasExecutableOther,
+            modifier = Modifier.fillMaxWidth().height(64.dp),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Text(
+                when {
+                    hasExpense && hasExecutableOther -> "保存事项并核对账单"
+                    hasExpense -> "核对账单"
+                    else -> "保存到当前事项"
+                },
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        if (!hasExpense && !hasExecutableOther) {
+            Text(
+                "识别结果置信度过低，已禁止保存。请换一张更清晰的图片。",
+                modifier = Modifier.padding(top = 10.dp).align(Alignment.CenterHorizontally),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+        Text(
+            "识别方式：${analysis.source}",
+            modifier = Modifier.padding(top = 14.dp).align(Alignment.CenterHorizontally),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun ActionResultRow(action: ScreenAction) {
+    val icon = when (action) {
+        is ExpenseAction -> Icons.Default.Payments
+        is PickupAction -> Icons.Default.Restaurant
+        is PackageAction -> Icons.Default.Inventory2
+        is TravelAction -> Icons.Default.FlightTakeoff
+    }
+    val title = when (action) {
+        is ExpenseAction -> "消费记账"
+        is PickupAction -> "取餐信息"
+        is PackageAction -> "取件提醒"
+        is TravelAction -> "出行卡片"
+    }
+    val detail = when (action) {
+        is ExpenseAction -> listOfNotNull(
+            action.amount?.let { "¥$it" },
+            action.merchant
+        ).joinToString(" · ").ifBlank { "金额和商户需要核对" }
+        is PickupAction -> listOfNotNull(
+            action.code?.let { "取餐码 $it" },
+            action.merchant,
+            action.location
+        ).joinToString(" · ").ifBlank { "取餐信息需要核对" }
+        is PackageAction -> listOfNotNull(
+            action.code?.let { "取件码 $it" },
+            action.company,
+            action.location
+        ).joinToString(" · ").ifBlank { "取件信息需要核对" }
+        is TravelAction -> listOfNotNull(
+            action.number,
+            action.from?.let { from -> action.to?.let { "$from → $it" } },
+            action.departureTime
+        ).joinToString(" · ").ifBlank { "出行信息需要核对" }
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Surface(
+            modifier = Modifier.size(40.dp),
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
+            }
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    when {
+                        action.confidence >= 0.85 -> "可信"
+                        action.confidence >= 0.65 -> "需核对"
+                        else -> "可信度低"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (action.confidence >= 0.65) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                )
+            }
+            Text(
+                detail,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 21.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecognitionCompleted(
+    title: String,
+    message: String,
+    onBack: () -> Unit,
+    onAgain: () -> Unit
+) {
+    val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    Column(
+        modifier = Modifier.fillMaxSize().padding(start = 22.dp, top = top + 8.dp, end = 22.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        ReceiptHeader(title = "AI 识别", onBack = onBack)
+        Spacer(modifier = Modifier.height(90.dp))
+        Icon(
+            Icons.Default.CheckCircle,
+            contentDescription = null,
+            modifier = Modifier.size(64.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(
+            message,
+            modifier = Modifier.padding(top = 10.dp),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(30.dp))
+        Button(onClick = onBack, modifier = Modifier.fillMaxWidth().height(60.dp), shape = RoundedCornerShape(19.dp)) {
+            Text("返回账本", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+        TextButton(onClick = onAgain, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+            Text("继续识别", fontSize = 17.sp)
+        }
     }
 }
 
@@ -375,7 +611,7 @@ private fun ReceiptFailure(
         Text(message, style = MaterialTheme.typography.titleLarge, lineHeight = 30.sp)
         BigReceiptButton(text = "重新选择图片", onClick = onRetry)
         TextButton(onClick = onManual, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-            Text("手动填写并确认", fontSize = 18.sp)
+            Text("改为手动记账", fontSize = 18.sp)
         }
     }
 }

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.MaterialTheme
@@ -140,7 +141,6 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                             }
                         },
                         onDelete = viewModel::deleteTransaction,
-                        onOpenQuickEntry = { navController.navigate("receipt") },
                         onCreateAccount = viewModel::createRecommendedAccount,
                         onGenerateDemo = viewModel::generateDemoData
                     )
@@ -441,6 +441,32 @@ fun JianzhangApp(viewModel: FinanceViewModel) {
                             },
                             modifier = Modifier.size(28.dp)
                         )
+                    }
+                }
+
+                if (route == "ledger") {
+                    Surface(
+                        onClick = { navController.navigate("receipt") },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(
+                                end = 28.dp,
+                                bottom = navigationBarInset + 12.dp + 64.dp + 16.dp + 56.dp + 12.dp
+                            )
+                            .size(56.dp)
+                            .zIndex(3f),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        shadowElevation = 8.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Psychology,
+                                contentDescription = "拍照识别或从相册导入",
+                                modifier = Modifier.size(30.dp)
+                            )
+                        }
                     }
                 }
             }

@@ -35,7 +35,6 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -93,7 +92,6 @@ fun LedgerScreen(
     onOpenSettings: () -> Unit,
     onEdit: (TransactionEntity) -> Unit,
     onDelete: (String) -> Unit,
-    onOpenQuickEntry: () -> Unit,
     onCreateAccount: (String, AccountType, String) -> Unit,
     onGenerateDemo: () -> Unit
 ) {
@@ -129,7 +127,7 @@ fun LedgerScreen(
     val density = LocalDensity.current
     val statusBarInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val floatingControlsClearance = navigationBarInset + 12.dp + 64.dp + 16.dp + 56.dp + 12.dp
+    val floatingControlsClearance = navigationBarInset + 12.dp + 64.dp + 16.dp + 56.dp + 12.dp + 56.dp + 12.dp
     val compactSearchHeight = 44.dp
     val compactSearchHeightPx = with(density) { compactSearchHeight.toPx() }
     val headerCollapseDistancePx = with(density) { 68.dp.toPx() }
@@ -275,56 +273,6 @@ fun LedgerScreen(
                     }
                 }
                 MonthNavigationButton(symbol = "›", description = "下个月", onClick = onMonthNext)
-            }
-        }
-        item(key = "screen-assistant-entry") {
-            Surface(
-                onClick = onOpenSettings,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-                shape = RoundedCornerShape(22.dp),
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shadowElevation = 5.dp
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 17.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(34.dp))
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("AI截图行动助手", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("一张截图，记账、取码或生成出行卡片", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    Text("设置 ›", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-        item(key = "quick-receipt-entry") {
-            Surface(
-                onClick = onOpenQuickEntry,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 5.dp),
-                shape = RoundedCornerShape(22.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                shadowElevation = 4.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(34.dp))
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("票据记账", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("拍小票或从相册导入，保留原有核对流程", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    Text("开始 ›", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                }
             }
         }
         if (smartCards.isNotEmpty()) {
